@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\AccountStatus;
 use App\Enums\UserRole;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -17,6 +19,10 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    protected $attributes = [
+        'account_status' => 'active',
+    ];
 
     /**
      * The attributes that are mass assignable.
@@ -50,6 +56,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
+            'account_status' => AccountStatus::class,
+            'suspended_at' => 'datetime',
         ];
     }
 
@@ -61,6 +69,11 @@ class User extends Authenticatable
     public function reviewedOrganizerRequests(): HasMany
     {
         return $this->hasMany(OrganizerRequest::class, 'reviewed_by');
+    }
+
+    public function suspender(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'suspended_by');
     }
 
     public function events(): HasMany

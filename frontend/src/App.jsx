@@ -9,6 +9,7 @@ import './styles/organizer-access.css'
 import './styles/admin-applications.css'
 import './styles/admin-events.css'
 import './styles/admin-monitoring.css'
+import './styles/admin-users.css'
 import './styles/organizer-application.css'
 
 const HomePage = lazy(() => import('./pages/public/HomePage.jsx'))
@@ -52,7 +53,8 @@ const AdminReservationDetailPage = lazy(() => import('./pages/admin/AdminReserva
 const AdminOverviewPage = lazy(() => import('./pages/admin/AdminOverviewPage.jsx'))
 const OrganizerApplicationsPage = lazy(() => import('./pages/admin/OrganizerApplicationsPage.jsx'))
 const OrganizerApplicationDetailPage = lazy(() => import('./pages/admin/OrganizerApplicationDetailPage.jsx'))
-const AdminUsersUnavailablePage = lazy(() => import('./pages/admin/AdminUsersUnavailablePage.jsx'))
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage.jsx'))
+const AdminUserDetailPage = lazy(() => import('./pages/admin/AdminUserDetailPage.jsx'))
 const AdminEventsPage = lazy(() => import('./pages/admin/AdminEventsPage.jsx'))
 const AdminEventDetailPage = lazy(() => import('./pages/admin/AdminEventDetailPage.jsx'))
 const AdminTicketTypeDetailPage = lazy(() => import('./pages/admin/AdminTicketTypeDetailPage.jsx'))
@@ -116,8 +118,8 @@ function App() {
             <Route path="/admin" element={<ProtectedRoute roles={['super_admin']}><SuperAdminLayout /></ProtectedRoute>}>
               <Route index element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="dashboard" element={<AdminOverviewPage />} />
-              <Route path="users" element={<AdminUsersUnavailablePage />} />
-              <Route path="users/:id" element={<AdminUsersUnavailablePage />} />
+              <Route path="users" element={<AdminUsersPage />} />
+              <Route path="users/:id" element={<AdminUserDetailPage />} />
               <Route path="events" element={<AdminEventsPage />} />
               <Route path="events/:eventId" element={<AdminEventDetailPage />} />
               <Route path="access" element={<AdminAccessPage />} />

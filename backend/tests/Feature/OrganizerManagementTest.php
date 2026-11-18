@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AccountStatus;
 use App\Enums\OrganizerRequestStatus;
 use App\Enums\UserRole;
 use App\Models\OrganizerRequest;
@@ -137,6 +138,54 @@ class OrganizerManagementTest extends TestCase
 
         $this->assertSame(UserRole::Organizer, $client->fresh()->role);
         $this->assertNotNull($application->fresh()->reviewed_at);
+    }
+
+    public function test_suspended_applicant_cannot_be_approved_until_reactivated(): void
+    {
+        $client = $this->makeUser(UserRole::Client);
+        $admin = $this->makeUser(UserRole::SuperAdmin);
+        $application = $this->makeApplication($client);
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson("/api/super-admin/users/{$client->id}/suspend", [
+                'suspension_reason' => 'Applicant account review.',
+            ])->assertOk();
+
+        $this->patchJson("/api/super-admin/organizer-requests/{$application->id}/approve")
+            ->assertConflict();
+
+        $this->assertSame(OrganizerRequestStatus::Pending, $application->fresh()->status);
+        $this->assertNull($application->fresh()->reviewed_by);
+        $this->assertSame(UserRole::Client, $client->fresh()->role);
+        $this->assertSame(AccountStatus::Suspended, $client->fresh()->account_status);
+
+        $this->patchJson("/api/super-admin/users/{$client->id}/reactivate")->assertOk();
+        $this->patchJson("/api/super-admin/organizer-requests/{$application->id}/approve")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'approved');
+
+        $this->assertSame(UserRole::Organizer, $client->fresh()->role);
+        $this->assertSame(OrganizerRequestStatus::Approved, $application->fresh()->status);
+    }
+
+    public function test_suspended_applicant_can_still_be_rejected(): void
+    {
+        $client = $this->makeUser(UserRole::Client);
+        $admin = $this->makeUser(UserRole::SuperAdmin);
+        $application = $this->makeApplication($client);
+
+        $this->actingAs($admin, 'sanctum')
+            ->patchJson("/api/super-admin/users/{$client->id}/suspend", [
+                'suspension_reason' => 'Applicant account review.',
+            ])->assertOk();
+
+        $this->patchJson("/api/super-admin/organizer-requests/{$application->id}/reject", [
+            'rejection_reason' => 'Application does not meet requirements.',
+        ])->assertOk()->assertJsonPath('data.status', 'rejected');
+
+        $this->assertSame(OrganizerRequestStatus::Rejected, $application->fresh()->status);
+        $this->assertSame(UserRole::Client, $client->fresh()->role);
+        $this->assertSame(AccountStatus::Suspended, $client->fresh()->account_status);
     }
 
     public function test_rejection_requires_a_reason_and_keeps_the_applicant_a_client(): void

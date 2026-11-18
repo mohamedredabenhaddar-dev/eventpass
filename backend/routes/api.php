@@ -15,11 +15,13 @@ use App\Http\Controllers\Api\PublicEventController;
 use App\Http\Controllers\Api\PublicTicketTypeController;
 use App\Http\Controllers\Api\StaffAssignedEventController;
 use App\Http\Controllers\Api\StaffScanController;
+use App\Http\Controllers\Api\SuperAdminDashboardStatisticsController;
 use App\Http\Controllers\Api\SuperAdminEventController;
 use App\Http\Controllers\Api\SuperAdminEventStaffController;
 use App\Http\Controllers\Api\SuperAdminOrganizerRequestController;
 use App\Http\Controllers\Api\SuperAdminReservationController;
 use App\Http\Controllers\Api\SuperAdminTicketTypeController;
+use App\Http\Controllers\Api\SuperAdminUserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -30,7 +32,7 @@ Route::get('/events', [PublicEventController::class, 'index']);
 Route::get('/events/{event}/ticket-types', [PublicTicketTypeController::class, 'index'])->whereNumber('event');
 Route::get('/events/{slug}', [PublicEventController::class, 'show']);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/super-admin/user', fn (Request $request) => $request->user())
         ->middleware('role:'.UserRole::SuperAdmin->value);
@@ -64,6 +66,12 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('super-admin')->middleware('role:'.UserRole::SuperAdmin->value)->group(function () {
+        Route::get('/dashboard/statistics', [SuperAdminDashboardStatisticsController::class, 'show']);
+        Route::get('/users', [SuperAdminUserController::class, 'index']);
+        Route::get('/users/{user}', [SuperAdminUserController::class, 'show'])->whereNumber('user');
+        Route::patch('/users/{user}/suspend', [SuperAdminUserController::class, 'suspend'])->whereNumber('user');
+        Route::patch('/users/{user}/reactivate', [SuperAdminUserController::class, 'reactivate'])->whereNumber('user');
+
         Route::get('/organizer-requests', [SuperAdminOrganizerRequestController::class, 'index']);
         Route::get('/organizer-requests/{id}', [SuperAdminOrganizerRequestController::class, 'show'])
             ->whereNumber('id');
@@ -111,4 +119,4 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::get('/user', function (Request $request) {
     return $request->user();
-})->middleware('auth:sanctum');
+})->middleware(['auth:sanctum', 'account.active']);

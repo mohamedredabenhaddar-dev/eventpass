@@ -3,6 +3,7 @@
 namespace Tests\Integration;
 
 use App\Enums\AccessAction;
+use App\Enums\AccountStatus;
 use App\Enums\EventStatus;
 use App\Enums\OrganizerRequestStatus;
 use App\Enums\PaymentAttemptStatus;
@@ -420,6 +421,65 @@ class MySqlConcurrencyTest extends TestCase
             $this->assertSame($adminTwo->id, $application->reviewed_by);
             $this->assertSame(UserRole::Client, $client->role);
         }
+    }
+
+    public function test_concurrent_super_admin_suspensions_cannot_remove_the_last_active_admin(): void
+    {
+        [$adminOne, $tokenOne] = $this->makeUser(UserRole::SuperAdmin);
+        [$adminTwo, $tokenTwo] = $this->makeUser(UserRole::SuperAdmin);
+
+        $results = $this->runConcurrently([
+            $this->request(
+                'suspend-admin-two',
+                'PATCH',
+                "/api/super-admin/users/{$adminTwo->id}/suspend",
+                ['suspension_reason' => 'Concurrent administrator suspension test.'],
+                $tokenOne,
+            ),
+            $this->request(
+                'suspend-admin-one',
+                'PATCH',
+                "/api/super-admin/users/{$adminOne->id}/suspend",
+                ['suspension_reason' => 'Concurrent administrator suspension test.'],
+                $tokenTwo,
+            ),
+        ]);
+
+        $this->assertSame([200, 401], $this->sortedStatuses($results));
+        $this->assertSame(1, User::query()
+            ->where('role', UserRole::SuperAdmin->value)
+            ->where('account_status', AccountStatus::Active->value)
+            ->whereIn('id', [$adminOne->id, $adminTwo->id])
+            ->count());
+        $this->assertSame(1, User::query()
+            ->where('role', UserRole::SuperAdmin->value)
+            ->where('account_status', AccountStatus::Suspended->value)
+            ->whereIn('id', [$adminOne->id, $adminTwo->id])
+            ->count());
+    }
+
+    public function test_concurrent_login_and_suspension_cannot_leave_a_usable_token_for_suspended_user(): void
+    {
+        [$admin, $adminToken] = $this->makeUser(UserRole::SuperAdmin);
+        [$client, $clientToken] = $this->makeUser(UserRole::Client);
+
+        $results = $this->runConcurrently([
+            $this->request('client-login', 'POST', '/api/login', [
+                'email' => $client->email,
+                'password' => 'integration-password',
+            ], $adminToken),
+            $this->request('client-suspension', 'PATCH', "/api/super-admin/users/{$client->id}/suspend", [
+                'suspension_reason' => 'Concurrent login and suspension integration test.',
+            ], $adminToken),
+        ]);
+
+        $byLabel = collect($results)->keyBy('label');
+        $this->assertContains($byLabel['client-login']['status'], [200, 422]);
+        $this->assertSame(200, $byLabel['client-suspension']['status']);
+        $this->assertSame(AccountStatus::Suspended, $client->fresh()->account_status);
+        $this->assertSame(0, $client->fresh()->tokens()->count());
+
+        $this->withToken($clientToken)->getJson('/api/client/user')->assertUnauthorized();
     }
 
     private function makeUser(UserRole $role): array

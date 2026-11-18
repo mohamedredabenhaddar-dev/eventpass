@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\AccountStatus;
 use App\Enums\OrganizerRequestStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
@@ -38,6 +39,7 @@ class SuperAdminOrganizerRequestController extends Controller
 
             $user = $application->user()->lockForUpdate()->firstOrFail();
             abort_unless($user->role === UserRole::Client, 409, 'The applicant is no longer a client.');
+            abort_unless($user->account_status === AccountStatus::Active, 409, 'Suspended applicants cannot be approved.');
 
             $application->status = OrganizerRequestStatus::Approved;
             $application->reviewed_by = $request->user()->getKey();
