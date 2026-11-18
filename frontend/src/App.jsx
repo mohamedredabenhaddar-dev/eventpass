@@ -22,6 +22,9 @@ const ReservationDetailPage = lazy(() => import('./pages/client/ReservationDetai
 const MyTicketsPage = lazy(() => import('./pages/client/MyTicketsPage.jsx'))
 const MyTicketDetailPage = lazy(() => import('./pages/client/MyTicketDetailPage.jsx'))
 const OrganizerApplicationPage = lazy(() => import('./pages/client/OrganizerApplicationPage.jsx'))
+const CheckoutPage = lazy(() => import('./pages/client/CheckoutPage.jsx'))
+const PaymentDetailPage = lazy(() => import('./pages/client/PaymentDetailPage.jsx'))
+const PaymentHistoryPage = lazy(() => import('./pages/client/PaymentHistoryPage.jsx'))
 
 const OrganizerLayout = lazy(() => import('./layouts/OrganizerLayout.jsx'))
 const OrganizerOverviewPage = lazy(() => import('./pages/organizer/OrganizerOverviewPage.jsx'))
@@ -80,6 +83,9 @@ function App() {
               <Route path="/client/dashboard" element={<ProtectedRoute roles={['client']}><RoleDashboardPage /></ProtectedRoute>} />
               <Route path="/client/reservations" element={<ProtectedRoute roles={['client']}><MyReservationsPage /></ProtectedRoute>} />
               <Route path="/client/reservations/:id" element={<ProtectedRoute roles={['client']}><ReservationDetailPage /></ProtectedRoute>} />
+              <Route path="/client/checkout/:reservationId" element={<ProtectedRoute roles={['client']}><CheckoutPage /></ProtectedRoute>} />
+              <Route path="/client/payments" element={<ProtectedRoute roles={['client']}><PaymentHistoryPage /></ProtectedRoute>} />
+              <Route path="/client/payments/:paymentId" element={<ProtectedRoute roles={['client']}><PaymentDetailPage /></ProtectedRoute>} />
               <Route path="/my-tickets" element={<ProtectedRoute roles={['client']}><MyTicketsPage /></ProtectedRoute>} />
               <Route path="/my-tickets/:reservationId/:ticketId" element={<ProtectedRoute roles={['client']}><MyTicketDetailPage /></ProtectedRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />

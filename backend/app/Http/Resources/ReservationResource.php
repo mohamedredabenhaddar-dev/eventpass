@@ -27,6 +27,7 @@ class ReservationResource extends JsonResource
             'items' => ReservationItemResource::collection($this->whenLoaded('items')),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
+            'payment_expires_at' => $this->payment_expires_at?->toISOString(),
         ];
     }
 }

@@ -187,7 +187,7 @@ class TicketAccessControlTest extends TestCase
         }
     }
 
-    public function test_new_reservation_issues_each_ticket_credential_once_and_persists_only_hashes(): void
+    public function test_new_reservation_has_no_qr_until_paid_and_credentials_persist_only_hashes(): void
     {
         $organizer = $this->makeUser(UserRole::Organizer);
         $client = $this->makeUser(UserRole::Client);
@@ -198,12 +198,19 @@ class TicketAccessControlTest extends TestCase
 
         $response = $this->actingAs($client, 'sanctum')->postJson("/api/events/{$event->id}/reservations", [
             'items' => [['ticket_type_id' => $type->id, 'quantity' => 2]],
-        ])->assertCreated()->assertJsonCount(2, 'qr_credentials');
+        ])->assertCreated()->assertJsonMissingPath('qr_credentials')->assertJsonPath('data.status', 'pending_payment');
 
-        foreach ($response->json('qr_credentials') as $credential) {
-            $ticket = Ticket::query()->where('reference', $credential['ticket_reference'])->firstOrFail();
+        $reservationId = $response->json('data.id');
+        $this->assertSame(2, Ticket::where('reservation_id', $reservationId)->where('status', TicketStatus::Pending->value)->count());
+        $this->postJson('/api/tickets/'.Ticket::where('reservation_id', $reservationId)->value('id').'/qr-credential')->assertConflict();
+        $attempt = $this->postJson("/api/reservations/{$reservationId}/payments")->assertCreated()->json('data');
+        $this->postJson("/api/payments/{$attempt['id']}/simulate-success")->assertOk();
+
+        foreach (Ticket::where('reservation_id', $reservationId)->get() as $ticket) {
+            $credential = $this->postJson("/api/tickets/{$ticket->id}/qr-credential")->assertCreated()->json('data');
+            $ticket->refresh();
             $this->assertSame(hash('sha256', $credential['qr_token']), $ticket->qr_token_hash);
-            $this->assertArrayNotHasKey('qr_token_hash', $response->json('data.items.0.tickets.0'));
+            $this->assertDatabaseMissing('tickets', ['id' => $ticket->id, 'qr_token_hash' => $credential['qr_token']]);
         }
     }
 
@@ -254,7 +261,7 @@ class TicketAccessControlTest extends TestCase
         $type = new TicketType(['name' => 'General', 'price' => '10.00', 'quantity' => 10, 'is_active' => true]);
         $type->forceFill(['available_quantity' => 9]);
         $event->ticketTypes()->save($type);
-        $reservation = new Reservation(['reference' => 'EP-'.strtoupper(bin2hex(random_bytes(8))), 'total' => '10.00', 'status' => ReservationStatus::Confirmed, 'payment_status' => 'unpaid']);
+        $reservation = new Reservation(['reference' => 'EP-'.strtoupper(bin2hex(random_bytes(8))), 'total' => '10.00', 'status' => ReservationStatus::Confirmed, 'payment_status' => 'paid']);
         $reservation->user()->associate($client);
         $reservation->event()->associate($event);
         $reservation->save();

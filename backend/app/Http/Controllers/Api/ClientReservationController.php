@@ -31,10 +31,7 @@ class ClientReservationController extends Controller
     {
         $reservation = $reservations->create($request->user(), $event, $request->validated('items'));
 
-        $response = (new ReservationResource($reservation))->response()->getData(true);
-        $response['qr_credentials'] = $reservation->getAttribute('_one_time_qr_credentials');
-
-        return response()->json($response, 201);
+        return (new ReservationResource($reservation))->response()->setStatusCode(201);
     }
 
     public function show(Request $request, Reservation $reservation): ClientReservationResource

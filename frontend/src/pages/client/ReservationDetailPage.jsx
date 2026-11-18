@@ -14,7 +14,7 @@ function ReservationDetailPage() {
   const loading = result.key !== `${id}:${retry}`
   const reservation = loading ? null : result.reservation
   const error = loading ? '' : result.error
-  const canCancel = reservation?.status === 'confirmed' && reservation.event?.start_at && new Date(reservation.event.start_at) > new Date()
+  const canCancel = ['confirmed', 'pending_payment'].includes(reservation?.status) && reservation.payment_status !== 'paid' && reservation.event?.start_at && new Date(reservation.event.start_at) > new Date()
   const cancel = async () => { setBusy(true); try { await cancelReservation(id); setRetry((n) => n + 1); setConfirm(false) } catch (err) { setResult((current) => ({ ...current, error: err.response?.data?.message || err.userMessage || 'Reservation could not be cancelled.' })) } finally { setBusy(false) } }
   if (loading) return <main className="ticketing-page"><p className="ticketing-state" role="status">Loading reservation…</p></main>
   if (!reservation) return <main className="ticketing-page"><div className="ticketing-error" role="alert"><p>{error}</p><button className="button button-outline" onClick={() => setRetry((n) => n + 1)}>Try again</button><Link to="/client/reservations">My reservations</Link></div></main>

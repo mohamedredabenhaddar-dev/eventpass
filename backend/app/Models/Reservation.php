@@ -17,6 +17,7 @@ class Reservation extends Model
         'total',
         'status',
         'payment_status',
+        'payment_expires_at',
     ];
 
     protected function casts(): array
@@ -25,6 +26,7 @@ class Reservation extends Model
             'total' => 'decimal:2',
             'status' => ReservationStatus::class,
             'payment_status' => PaymentStatus::class,
+            'payment_expires_at' => 'datetime',
         ];
     }
 
@@ -46,5 +48,10 @@ class Reservation extends Model
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
     }
 }

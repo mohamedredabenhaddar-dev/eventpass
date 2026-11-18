@@ -32,7 +32,7 @@ function SiteHeader() {
         </nav>
         <div className={`nav-actions${menuOpen ? ' is-open' : ''}`}>
           {user ? <>
-            {user.role === 'client' && <><Link className="nav-login" to="/my-tickets" onClick={closeMenu}>My tickets</Link><Link className="nav-login" to="/client/reservations" onClick={closeMenu}>My reservations</Link><Link className="nav-login" to="/organizer-application" onClick={closeMenu}>Become an organizer</Link></>}
+            {user.role === 'client' && <><Link className="nav-login" to="/my-tickets" onClick={closeMenu}>My tickets</Link><Link className="nav-login" to="/client/reservations" onClick={closeMenu}>My reservations</Link><Link className="nav-login" to="/client/payments" onClick={closeMenu}>Payment history</Link><Link className="nav-login" to="/organizer-application" onClick={closeMenu}>Become an organizer</Link></>}
             {user.role === 'organizer' && <Link className="nav-login" to="/organizer-application" onClick={closeMenu}>Application status</Link>}
             {user.role === 'staff' && <Link className="nav-login" to="/staff/dashboard" onClick={closeMenu}>Staff dashboard</Link>}
             <Link className="nav-login nav-user" to={roleHome[user.role] || '/'} onClick={closeMenu}>{user.name} <span>{user.role?.replace('_', ' ')}</span></Link>

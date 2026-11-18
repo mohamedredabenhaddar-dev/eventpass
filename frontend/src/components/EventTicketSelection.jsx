@@ -75,7 +75,7 @@ function EventTicketSelection({ event }) {
         ticket_type_id: ticketType.id,
         quantity,
       })))
-      navigate(`/client/reservations/${reservation.id}`, { state: { created: true } })
+      navigate(`/client/checkout/${reservation.id}`, { state: { created: true } })
     } catch (requestError) {
       const errors = requestError.response?.data?.errors
       if (errors) setValidationErrors(Object.values(errors).flat())
@@ -102,7 +102,7 @@ function EventTicketSelection({ event }) {
       {submitError && <div className="ticketing-error" role="alert"><p>{submitError}</p>{validationErrors.length > 0 && <ul>{validationErrors.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul>}</div>}
       {user?.role && user.role !== 'client' && <p className="ticketing-note">Sign in with a client account to reserve tickets.</p>}
       <button className="button button-primary ticket-reserve-button" type="button" disabled={submitting || loading || ticketTypes.length === 0} onClick={reserve}>{submitting ? 'Reserving...' : !user ? 'Sign in to reserve' : user.role === 'client' ? <>Reserve tickets <ArrowRight size={16} /></> : 'Client account required'}</button>
-      <p className="ticketing-demo-note">Demo reservations are confirmed with an unpaid status. Payment is not processed.</p>
+      <p className="ticketing-demo-note">A temporary ticket hold will be created. Checkout is DEMO only; no money is charged.</p>
     </>}
   </section>
 }

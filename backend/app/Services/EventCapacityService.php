@@ -18,7 +18,10 @@ class EventCapacityService
         $query = DB::table('reservation_items')
             ->join('reservations', 'reservations.id', '=', 'reservation_items.reservation_id')
             ->where('reservations.event_id', $event->id)
-            ->where('reservations.status', ReservationStatus::Confirmed->value);
+            ->where(function ($query) {
+                $query->where('reservations.status', ReservationStatus::Confirmed->value)
+                    ->orWhere('reservations.status', ReservationStatus::PendingPayment->value);
+            });
 
         if ($ticketTypeId !== null) {
             $query->where('reservation_items.ticket_type_id', $ticketTypeId);

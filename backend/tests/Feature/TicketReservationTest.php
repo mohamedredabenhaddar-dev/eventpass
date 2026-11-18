@@ -11,6 +11,7 @@ use App\Models\Reservation;
 use App\Models\Ticket;
 use App\Models\TicketType;
 use App\Models\User;
+use App\Services\EventCapacityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -161,6 +162,47 @@ class TicketReservationTest extends TestCase
         $this->assertSame(1, Reservation::where('event_id', $event->id)->count());
     }
 
+    public function test_expired_hold_remains_committed_through_organizer_update_until_expiry_restores_it_once(): void
+    {
+        $organizer = $this->makeUser(UserRole::Organizer);
+        $client = $this->makeUser(UserRole::Client);
+        $event = $this->makeEvent($organizer, EventStatus::Published);
+        $event->forceFill(['capacity' => 6])->save();
+        $heldType = $this->makeTicketType($event, 4, '10.00', 'Held');
+        $confirmedType = $this->makeTicketType($event, 2, '20.00', 'Confirmed');
+
+        $expiredReservationId = $this->reserve($client, $event, [[$heldType, 2]])
+            ->assertCreated()->json('data.id');
+        $confirmedReservationId = $this->reserve($client, $event, [[$confirmedType, 2]])
+            ->assertCreated()->json('data.id');
+        $payment = $this->postJson("/api/reservations/{$confirmedReservationId}/payments")
+            ->assertCreated()->json('data');
+        $this->postJson("/api/payments/{$payment['id']}/simulate-success")->assertOk();
+
+        $expiredReservation = Reservation::findOrFail($expiredReservationId);
+        $expiredReservation->forceFill(['payment_expires_at' => now()->subMinute()])->save();
+        $this->assertSame(4, app(EventCapacityService::class)->committedInventory($event));
+
+        $this->actingAs($organizer, 'sanctum')
+            ->patchJson("/api/organizer/events/{$event->id}/ticket-types/{$heldType->id}", ['name' => 'Held Updated'])
+            ->assertOk()->assertJsonPath('data.available_quantity', 2);
+
+        $this->artisan('reservations:expire-pending')->assertExitCode(0);
+        $this->assertSame(ReservationStatus::Expired, $expiredReservation->fresh()->status);
+        $this->assertSame(4, $heldType->fresh()->available_quantity);
+        $this->assertSame(ReservationStatus::Confirmed, Reservation::findOrFail($confirmedReservationId)->status);
+        $this->assertSame('paid', Reservation::findOrFail($confirmedReservationId)->payment_status->value);
+        $this->assertSame(0, $confirmedType->fresh()->available_quantity);
+        $this->assertSame(2, app(EventCapacityService::class)->committedInventory($event));
+
+        $this->artisan('reservations:expire-pending')->assertExitCode(0);
+        $this->assertSame(4, $heldType->fresh()->available_quantity);
+
+        $this->reserve($client, $event, [[$heldType, 4]])->assertCreated();
+        $this->assertSame(6, app(EventCapacityService::class)->committedInventory($event));
+        $this->assertSame(0, $heldType->fresh()->available_quantity);
+    }
+
     public function test_cancelled_reservation_history_does_not_consume_event_capacity_again(): void
     {
         $client = $this->makeUser(UserRole::Client);
@@ -229,7 +271,7 @@ class TicketReservationTest extends TestCase
         ])->assertCreated()
             ->assertJsonPath('data.user_id', $client->id)
             ->assertJsonPath('data.total', '45.00')
-            ->assertJsonPath('data.status', 'confirmed')
+            ->assertJsonPath('data.status', 'pending_payment')
             ->assertJsonPath('data.payment_status', 'unpaid')
             ->assertJsonPath('data.items.0.unit_price', '12.50')
             ->assertJsonPath('data.items.0.subtotal', '25.00')
@@ -240,7 +282,7 @@ class TicketReservationTest extends TestCase
         $this->assertSame($client->id, $reservation->user_id);
         $this->assertSame(3, Ticket::where('reservation_id', $reservationId)->count());
         $this->assertSame(3, Ticket::where('reservation_id', $reservationId)->distinct('reference')->count('reference'));
-        $this->assertSame(3, Ticket::where('reservation_id', $reservationId)->where('status', TicketStatus::Valid)->count());
+        $this->assertSame(3, Ticket::where('reservation_id', $reservationId)->where('status', TicketStatus::Pending)->count());
         $this->assertSame(3, $general->fresh()->available_quantity);
         $this->assertSame(3, $vip->fresh()->available_quantity);
     }
@@ -398,7 +440,7 @@ class TicketReservationTest extends TestCase
             ->assertJsonPath('data.0.items.0.unit_price', '25.00')
             ->assertJsonPath('data.0.items.0.ticket_type.name', 'General Admission')
             ->assertJsonPath('data.0.items.0.tickets.0.reference', Ticket::where('reservation_id', $reservationId)->value('reference'))
-            ->assertJsonPath('data.0.items.0.tickets.0.status', 'valid')
+            ->assertJsonPath('data.0.items.0.tickets.0.status', 'pending')
             ->assertJsonPath('data.0.items.0.tickets.0.access_state', 'NOT_ENTERED')
             ->assertJsonMissingPath('data.0.event.organizer_id')
             ->assertJsonMissingPath('data.0.event.description')
@@ -408,11 +450,11 @@ class TicketReservationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.event.venue_name', 'Central Hall')
             ->assertJsonPath('data.event.city', 'Casablanca')
-            ->assertJsonPath('data.items.0.tickets.0.status', 'valid');
+            ->assertJsonPath('data.items.0.tickets.0.status', 'pending');
         $this->actingAs($this->makeUser(UserRole::Staff), 'sanctum')->patchJson("/api/reservations/{$reservationId}/cancel")->assertForbidden();
         $this->actingAs($otherClient, 'sanctum')->getJson("/api/reservations/{$reservationId}")->assertNotFound();
         $this->patchJson("/api/reservations/{$reservationId}/cancel")->assertNotFound();
-        $this->assertSame(ReservationStatus::Confirmed, Reservation::findOrFail($reservationId)->status);
+        $this->assertSame(ReservationStatus::PendingPayment, Reservation::findOrFail($reservationId)->status);
     }
 
     public function test_client_reservation_list_keeps_pagination_and_uses_a_fixed_query_count(): void
@@ -480,7 +522,7 @@ class TicketReservationTest extends TestCase
         $event->save();
 
         $this->actingAs($client, 'sanctum')->patchJson("/api/reservations/{$reservationId}/cancel")->assertConflict();
-        $this->assertSame(ReservationStatus::Confirmed, Reservation::findOrFail($reservationId)->status);
+        $this->assertSame(ReservationStatus::PendingPayment, Reservation::findOrFail($reservationId)->status);
         $this->assertSame(3, $ticketType->fresh()->available_quantity);
     }
 

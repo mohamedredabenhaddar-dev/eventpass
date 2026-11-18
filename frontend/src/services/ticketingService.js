@@ -34,6 +34,27 @@ export async function fetchTicketQrCredential(ticketId) {
   return resourceData(response)
 }
 
+export async function createPaymentAttempt(reservationId) {
+  return resourceData(await api.post(`/reservations/${reservationId}/payments`))
+}
+
+export async function simulatePaymentSuccess(paymentId) {
+  return resourceData(await api.post(`/payments/${paymentId}/simulate-success`))
+}
+
+export async function simulatePaymentFailure(paymentId) {
+  return resourceData(await api.post(`/payments/${paymentId}/simulate-failure`))
+}
+
+export async function fetchPayment(paymentId) {
+  return resourceData(await api.get(`/payments/${paymentId}`))
+}
+
+export async function fetchMyPayments(page = 1) {
+  const { data } = await api.get('/payments', { params: { page } })
+  return data
+}
+
 export async function fetchOrganizerTicketTypes(eventId, page = 1) {
   const { data } = await api.get(`/organizer/events/${eventId}/ticket-types`, { params: { page } })
   return data

@@ -188,7 +188,7 @@ class SecurityHardeningTest extends TestCase
 
         $reservation = new Reservation([
             'reference' => 'EP-RATE-LIMIT-1', 'total' => '10.00',
-            'status' => ReservationStatus::Confirmed, 'payment_status' => 'unpaid',
+            'status' => ReservationStatus::Confirmed, 'payment_status' => 'paid',
         ]);
         $reservation->user()->associate($client);
         $reservation->event()->associate($event);

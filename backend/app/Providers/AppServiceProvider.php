@@ -37,5 +37,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('staff-scans', fn (Request $request) => Limit::perMinute(config('rate_limits.staff_scans_per_minute'))
             ->by('staff-scans:user:'.$request->user()->getAuthIdentifier())
             ->response(fn () => response()->json(['message' => 'Too many requests.'], 429)));
+
+        RateLimiter::for('payments', fn (Request $request) => Limit::perMinute(config('rate_limits.payments_per_minute'))
+            ->by('payments:user:'.$request->user()->getAuthIdentifier())
+            ->response(fn () => response()->json(['message' => 'Too many requests.'], 429)));
     }
 }

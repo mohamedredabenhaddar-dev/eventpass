@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AccessAction;
 use App\Enums\EventStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\ReservationStatus;
 use App\Enums\TicketAccessState;
 use App\Enums\TicketStatus;
@@ -37,7 +38,7 @@ class TicketAccessService
 
             $ticket = Ticket::query()->with('reservation')->lockForUpdate()->findOrFail($snapshot->id);
             abort_unless(is_string($ticket->qr_token_hash) && hash_equals($ticket->qr_token_hash, $tokenHash), 404, 'Invalid QR credential.');
-            abort_unless($ticket->status === TicketStatus::Valid && $ticket->reservation->status === ReservationStatus::Confirmed, 409, 'This ticket has been cancelled or is invalid.');
+            abort_unless($ticket->status === TicketStatus::Valid && $ticket->reservation->status === ReservationStatus::Confirmed && $ticket->reservation->payment_status === PaymentStatus::Paid, 409, 'This ticket has been cancelled or is invalid.');
 
             $state = $ticket->access_state;
             if ($action === AccessAction::Entry) {

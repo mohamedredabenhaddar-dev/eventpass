@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ClientPaymentController;
 use App\Http\Controllers\Api\ClientReservationController;
 use App\Http\Controllers\Api\ClientTicketCredentialController;
 use App\Http\Controllers\Api\EventAccessReportController;
@@ -44,6 +45,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/organizer-requests', [OrganizerRequestController::class, 'store']);
         Route::get('/organizer-requests/my', [OrganizerRequestController::class, 'mine']);
         Route::get('/reservations', [ClientReservationController::class, 'index']);
+        Route::get('/payments', [ClientPaymentController::class, 'index']);
+        Route::get('/payments/{payment}', [ClientPaymentController::class, 'show'])->whereNumber('payment');
+        Route::post('/reservations/{reservation}/payments', [ClientPaymentController::class, 'store'])->whereNumber('reservation')->middleware('throttle:payments');
+        Route::post('/payments/{payment}/simulate-success', [ClientPaymentController::class, 'success'])->whereNumber('payment')->middleware('throttle:payments');
+        Route::post('/payments/{payment}/simulate-failure', [ClientPaymentController::class, 'failure'])->whereNumber('payment')->middleware('throttle:payments');
         Route::get('/reservations/{reservation}', [ClientReservationController::class, 'show'])->whereNumber('reservation');
         Route::patch('/reservations/{reservation}/cancel', [ClientReservationController::class, 'cancel'])->whereNumber('reservation');
         Route::post('/events/{event}/reservations', [ClientReservationController::class, 'store'])->whereNumber('event');

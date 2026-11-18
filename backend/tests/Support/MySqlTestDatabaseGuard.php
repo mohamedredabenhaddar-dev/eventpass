@@ -46,7 +46,7 @@ final class MySqlTestDatabaseGuard
         if ($requireSchema) {
             foreach ([
                 'migrations', 'users', 'personal_access_tokens', 'organizer_requests', 'events',
-                'ticket_types', 'reservations', 'reservation_items', 'tickets',
+                'ticket_types', 'reservations', 'reservation_items', 'payments', 'tickets',
                 'event_staff_assignments', 'access_logs',
             ] as $table) {
                 if (! $connection->getSchemaBuilder()->hasTable($table)) {

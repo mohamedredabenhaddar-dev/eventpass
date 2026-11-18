@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\EventStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\ReservationStatus;
 use App\Enums\TicketStatus;
 use App\Models\Event;
@@ -24,7 +25,7 @@ class TicketCredentialService
             $locked = Ticket::query()->with('reservation')->lockForUpdate()->findOrFail($snapshot->id);
 
             abort_unless($locked->reservation->user_id === $user->getKey(), 404);
-            abort_unless($locked->status === TicketStatus::Valid && $locked->reservation->status === ReservationStatus::Confirmed, 409, 'Only valid tickets from confirmed reservations can receive a QR credential.');
+            abort_unless($locked->status === TicketStatus::Valid && $locked->reservation->status === ReservationStatus::Confirmed && $locked->reservation->payment_status === PaymentStatus::Paid, 409, 'Only paid and confirmed tickets can receive a QR credential.');
 
             $token = self::generateToken();
             $locked->forceFill(['qr_token_hash' => hash('sha256', $token)])->save();

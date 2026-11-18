@@ -5,6 +5,8 @@ namespace Tests\Integration;
 use App\Enums\AccessAction;
 use App\Enums\EventStatus;
 use App\Enums\OrganizerRequestStatus;
+use App\Enums\PaymentAttemptStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\ReservationStatus;
 use App\Enums\TicketAccessState;
 use App\Enums\TicketStatus;
@@ -12,6 +14,7 @@ use App\Enums\UserRole;
 use App\Models\AccessLog;
 use App\Models\Event;
 use App\Models\EventStaffAssignment;
+use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationItem;
 use App\Models\Ticket;
@@ -83,7 +86,7 @@ class MySqlConcurrencyTest extends TestCase
         $activeQuantity = ReservationItem::query()
             ->whereHas('reservation', fn ($query) => $query
                 ->where('event_id', $event->id)
-                ->where('status', ReservationStatus::Confirmed->value))
+                ->whereIn('status', [ReservationStatus::PendingPayment->value, ReservationStatus::Confirmed->value]))
             ->sum('quantity');
         $this->assertSame(1, (int) $activeQuantity);
         $this->assertSame(1, Ticket::query()->whereHas('reservation', fn ($query) => $query->where('event_id', $event->id))->count());
@@ -106,6 +109,157 @@ class MySqlConcurrencyTest extends TestCase
         $this->assertSame(ReservationStatus::Cancelled, $reservation->fresh()->status);
         $this->assertSame(5, $ticketType->fresh()->available_quantity);
         $this->assertSame(2, Ticket::query()->where('reservation_id', $reservation->id)->where('status', TicketStatus::Cancelled->value)->count());
+    }
+
+    public function test_expiration_racing_successful_payment_cannot_confirm_an_expired_reservation(): void
+    {
+        [$organizer] = $this->makeUser(UserRole::Organizer);
+        [$client, $clientToken] = $this->makeUser(UserRole::Client);
+        $event = $this->makeEvent($organizer);
+        $ticketType = $this->makeTicketType($event, 5, 3);
+        $reservation = $this->makePendingReservation($client, $event, $ticketType, 2);
+        $payment = $this->createPaymentAttempt($client, $reservation);
+        $reservation->forceFill(['payment_expires_at' => now()->subMinute()])->save();
+
+        $results = $this->runConcurrently([
+            $this->expireRequest('expire-race', $reservation, $clientToken),
+            $this->request('pay-expired', 'POST', "/api/payments/{$payment->id}/simulate-success", [], $clientToken),
+        ]);
+
+        $this->assertSame([200, 409], $this->sortedStatuses($results));
+        $this->assertSame(true, collect($results)->firstWhere('label', 'expire-race')['service_result']);
+        $this->assertSame(ReservationStatus::Expired, $reservation->fresh()->status);
+        $this->assertSame(PaymentStatus::Expired, $reservation->fresh()->payment_status);
+        $this->assertSame(PaymentAttemptStatus::Expired, $payment->fresh()->status);
+        $this->assertSame(0, $reservation->tickets()->where('status', TicketStatus::Valid->value)->count());
+        $this->assertSame(2, $reservation->tickets()->where('status', TicketStatus::Cancelled->value)->count());
+        $this->assertSame(5, $ticketType->fresh()->available_quantity);
+        $this->assertSame(0, Payment::query()->where('reservation_id', $reservation->id)->where('status', PaymentAttemptStatus::Succeeded->value)->count());
+    }
+
+    public function test_cancellation_racing_successful_payment_leaves_one_consistent_lifecycle_outcome(): void
+    {
+        [$organizer] = $this->makeUser(UserRole::Organizer);
+        [$client, $clientToken] = $this->makeUser(UserRole::Client);
+        $event = $this->makeEvent($organizer);
+        $ticketType = $this->makeTicketType($event, 5, 3);
+        $reservation = $this->makePendingReservation($client, $event, $ticketType, 2);
+        $payment = $this->createPaymentAttempt($client, $reservation);
+
+        $results = $this->runConcurrently([
+            $this->request('cancel-race', 'PATCH', "/api/reservations/{$reservation->id}/cancel", [], $clientToken),
+            $this->request('pay-race', 'POST', "/api/payments/{$payment->id}/simulate-success", [], $clientToken),
+        ]);
+
+        $this->assertSame([200, 409], $this->sortedStatuses($results));
+        if ($reservation->fresh()->status === ReservationStatus::Confirmed) {
+            $this->assertSame(PaymentStatus::Paid, $reservation->fresh()->payment_status);
+            $this->assertSame(PaymentAttemptStatus::Succeeded, $payment->fresh()->status);
+            $this->assertSame(2, $reservation->tickets()->where('status', TicketStatus::Valid->value)->count());
+            $this->assertSame(3, $ticketType->fresh()->available_quantity);
+        } else {
+            $this->assertSame(ReservationStatus::Cancelled, $reservation->fresh()->status);
+            $this->assertSame(PaymentStatus::Expired, $reservation->fresh()->payment_status);
+            $this->assertSame(PaymentAttemptStatus::Expired, $payment->fresh()->status);
+            $this->assertSame(0, $reservation->tickets()->where('status', TicketStatus::Valid->value)->count());
+            $this->assertSame(2, $reservation->tickets()->where('status', TicketStatus::Cancelled->value)->count());
+            $this->assertSame(5, $ticketType->fresh()->available_quantity);
+        }
+        $this->assertLessThanOrEqual(1, Payment::query()->where('reservation_id', $reservation->id)->where('status', PaymentAttemptStatus::Succeeded->value)->count());
+    }
+
+    public function test_two_payment_attempts_cannot_succeed_for_one_reservation(): void
+    {
+        [$organizer] = $this->makeUser(UserRole::Organizer);
+        [$client, $clientToken] = $this->makeUser(UserRole::Client);
+        $event = $this->makeEvent($organizer);
+        $ticketType = $this->makeTicketType($event, 5, 3);
+        $reservation = $this->makePendingReservation($client, $event, $ticketType, 2);
+        $first = $this->createPaymentAttempt($client, $reservation);
+        $second = $reservation->payments()->create([
+            'payment_reference' => 'DEMO-'.Str::upper((string) Str::ulid()),
+            'amount' => $reservation->total,
+            'currency' => 'MAD',
+            'status' => PaymentAttemptStatus::Pending,
+            'payment_method' => 'demo',
+        ]);
+
+        $results = $this->runConcurrently([
+            $this->request('succeed-first', 'POST', "/api/payments/{$first->id}/simulate-success", [], $clientToken),
+            $this->request('succeed-second', 'POST', "/api/payments/{$second->id}/simulate-success", [], $clientToken),
+        ]);
+
+        $this->assertSame([200, 409], $this->sortedStatuses($results));
+        $this->assertSame(ReservationStatus::Confirmed, $reservation->fresh()->status);
+        $this->assertSame(PaymentStatus::Paid, $reservation->fresh()->payment_status);
+        $this->assertSame(1, Payment::query()->where('reservation_id', $reservation->id)->where('status', PaymentAttemptStatus::Succeeded->value)->count());
+        $this->assertSame(1, Payment::query()->where('reservation_id', $reservation->id)->where('status', PaymentAttemptStatus::Expired->value)->count());
+        $this->assertSame(2, $reservation->tickets()->where('status', TicketStatus::Valid->value)->count());
+        $this->assertSame(3, $ticketType->fresh()->available_quantity);
+    }
+
+    public function test_expiration_racing_organizer_ticket_type_update_preserves_inventory(): void
+    {
+        [$organizer, $organizerToken] = $this->makeUser(UserRole::Organizer);
+        [$client, $clientToken] = $this->makeUser(UserRole::Client);
+        $event = $this->makeEvent($organizer);
+        $ticketType = $this->makeTicketType($event, 5, 3);
+        $reservation = $this->makePendingReservation($client, $event, $ticketType, 2, expired: true);
+
+        $results = $this->runConcurrently([
+            $this->expireRequest('expire-update-race', $reservation, $clientToken),
+            $this->request('organizer-update', 'PATCH', "/api/organizer/events/{$event->id}/ticket-types/{$ticketType->id}", ['quantity' => 6], $organizerToken),
+        ]);
+
+        $this->assertSame([200, 200], $this->sortedStatuses($results));
+        $this->assertSame(true, collect($results)->firstWhere('label', 'expire-update-race')['service_result']);
+        $this->assertSame(6, $ticketType->fresh()->quantity);
+        $this->assertSame(6, $ticketType->fresh()->available_quantity);
+        $this->assertSame(ReservationStatus::Expired, $reservation->fresh()->status);
+        $this->assertSame(2, $reservation->tickets()->where('status', TicketStatus::Cancelled->value)->count());
+        $this->assertGreaterThanOrEqual(0, $ticketType->fresh()->available_quantity);
+        $this->assertLessThanOrEqual($ticketType->fresh()->quantity, $ticketType->fresh()->available_quantity);
+    }
+
+    public function test_concurrent_payment_requests_reuse_one_pending_attempt(): void
+    {
+        [$organizer] = $this->makeUser(UserRole::Organizer);
+        [$client, $clientToken] = $this->makeUser(UserRole::Client);
+        $event = $this->makeEvent($organizer);
+        $ticketType = $this->makeTicketType($event, 5, 3);
+        $reservation = $this->makePendingReservation($client, $event, $ticketType, 2);
+
+        $results = $this->runConcurrently([
+            $this->request('payment-request-one', 'POST', "/api/reservations/{$reservation->id}/payments", [], $clientToken),
+            $this->request('payment-request-two', 'POST', "/api/reservations/{$reservation->id}/payments", [], $clientToken),
+        ]);
+
+        $this->assertSame([201, 201], $this->sortedStatuses($results));
+        $this->assertSame(1, Payment::query()->where('reservation_id', $reservation->id)->where('status', PaymentAttemptStatus::Pending->value)->count());
+        $this->assertSame(1, Payment::query()->where('reservation_id', $reservation->id)->count());
+    }
+
+    public function test_concurrent_expiration_restores_inventory_exactly_once(): void
+    {
+        [$organizer] = $this->makeUser(UserRole::Organizer);
+        [$client, $clientToken] = $this->makeUser(UserRole::Client);
+        $event = $this->makeEvent($organizer);
+        $ticketType = $this->makeTicketType($event, 5, 3);
+        $reservation = $this->makePendingReservation($client, $event, $ticketType, 2);
+        $payment = $this->createPaymentAttempt($client, $reservation);
+        $reservation->forceFill(['payment_expires_at' => now()->subMinute()])->save();
+
+        $results = $this->runConcurrently([
+            $this->expireRequest('expire-one', $reservation, $clientToken),
+            $this->expireRequest('expire-two', $reservation, $clientToken),
+        ]);
+
+        $this->assertSame([200, 204], $this->sortedStatuses($results));
+        $this->assertSame([false, true], collect($results)->pluck('service_result')->sort()->values()->all());
+        $this->assertSame(ReservationStatus::Expired, $reservation->fresh()->status);
+        $this->assertSame(5, $ticketType->fresh()->available_quantity);
+        $this->assertSame(PaymentAttemptStatus::Expired, $payment->fresh()->status);
+        $this->assertSame(2, $reservation->tickets()->where('status', TicketStatus::Cancelled->value)->count());
     }
 
     public function test_two_concurrent_entry_scans_create_one_log_and_one_state_transition(): void
@@ -353,6 +507,30 @@ class MySqlConcurrencyTest extends TestCase
         return $reservation->fresh();
     }
 
+    private function makePendingReservation(User $client, Event $event, TicketType $ticketType, int $quantity, bool $expired = false): Reservation
+    {
+        $reservation = $this->makeReservation($client, $event, $ticketType, $quantity);
+        $reservation->forceFill([
+            'status' => ReservationStatus::PendingPayment,
+            'payment_status' => PaymentStatus::Pending,
+            'payment_expires_at' => $expired ? now()->subMinute() : now()->addMinutes(15),
+        ])->save();
+        $reservation->tickets()->update(['status' => TicketStatus::Pending->value, 'qr_token_hash' => null]);
+
+        return $reservation->fresh();
+    }
+
+    private function createPaymentAttempt(User $client, Reservation $reservation): Payment
+    {
+        $response = $this->actingAs($client, 'sanctum')
+            ->postJson("/api/reservations/{$reservation->id}/payments")
+            ->assertCreated();
+        $paymentId = $response->json('data.id');
+        $this->assertIsInt($paymentId);
+
+        return Payment::query()->findOrFail($paymentId);
+    }
+
     private function makeScannableTicket(TicketAccessState $state = TicketAccessState::NotEntered): array
     {
         [$organizer] = $this->makeUser(UserRole::Organizer);
@@ -361,6 +539,7 @@ class MySqlConcurrencyTest extends TestCase
         $event = $this->makeEvent($organizer);
         $ticketType = $this->makeTicketType($event, 10, 9);
         $reservation = $this->makeReservation($client, $event, $ticketType, 1);
+        $reservation->forceFill(['payment_status' => 'paid'])->save();
         $ticket = $reservation->tickets()->firstOrFail();
         $plainToken = Str::random(43);
         $ticket->forceFill([
@@ -429,6 +608,17 @@ class MySqlConcurrencyTest extends TestCase
         }
 
         return $request;
+    }
+
+    private function expireRequest(string $label, Reservation $reservation, string $token): array
+    {
+        return $this->request(
+            $label,
+            'POST',
+            "/api/__integration/reservations/{$reservation->id}/expire",
+            [],
+            $token,
+        );
     }
 
     private function scanRequest(string $label, array $fixture, string $action = 'ENTRY', ?string $token = null): array

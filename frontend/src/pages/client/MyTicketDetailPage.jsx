@@ -11,6 +11,32 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString()
 }
 
+function ticketStatus(ticket, reservation) {
+  const paymentStatus = reservation?.payment_status
+  const reservationStatus = reservation?.status
+  if (reservationStatus === 'expired' || paymentStatus === 'expired' || ticket?.status === 'expired') {
+    return { label: 'Expired', variant: 'expired' }
+  }
+  if (reservationStatus === 'cancelled' || ticket?.status === 'cancelled') {
+    return { label: 'Cancelled', variant: 'cancelled' }
+  }
+  if (ticket?.status === 'pending' || reservationStatus === 'pending_payment') {
+    return paymentStatus === 'failed'
+      ? { label: 'Payment failed', variant: 'failed' }
+      : { label: 'Pending payment', variant: 'pending' }
+  }
+  if (paymentStatus === 'refunded' || ticket?.status === 'refunded') {
+    return { label: 'Refunded', variant: 'refunded' }
+  }
+  if (ticket?.status === 'valid' && reservationStatus === 'confirmed' && paymentStatus === 'paid') {
+    return { label: 'Valid / active', variant: 'valid' }
+  }
+  if (paymentStatus === 'unpaid') return { label: 'Payment required', variant: 'pending' }
+
+  const value = ticket?.status || reservationStatus || 'unknown'
+  return { label: value.replaceAll('_', ' '), variant: 'cancelled' }
+}
+
 function MyTicketDetailPage() {
   const { reservationId, ticketId } = useParams()
   const [result, setResult] = useState({ key: '', reservation: null, ticket: null, item: null, event: null, error: '' })
@@ -53,7 +79,8 @@ function MyTicketDetailPage() {
   const ticket = loading ? null : result.ticket
   const item = loading ? null : result.item
   const event = loading ? null : result.event
-  const valid = ticket?.status === 'valid' && reservation?.status === 'confirmed'
+  const valid = ticket?.status === 'valid' && reservation?.status === 'confirmed' && reservation?.payment_status === 'paid'
+  const status = ticketStatus(ticket, reservation)
   const credentialKey = `${resultKey}:credential:${retry}`
 
   useEffect(() => {
@@ -92,15 +119,15 @@ function MyTicketDetailPage() {
   return <main className="ticketing-page ticket-detail-page">
     <Link className="ticketing-back" to="/my-tickets"><ArrowLeft size={15} /> My tickets</Link>
     <article className="digital-ticket">
-      <header className="digital-ticket-header"><div className="digital-ticket-brand"><Ticket size={19} /><span>EVENTPASS / ADMISSION</span></div><span className={`ticket-status status-${valid ? 'valid' : 'cancelled'}`}>{valid ? 'Valid ticket' : 'Cancelled'}</span></header>
+      <header className="digital-ticket-header"><div className="digital-ticket-brand"><Ticket size={19} /><span>EVENTPASS / ADMISSION</span></div><span className={`ticket-status status-${status.variant}`}>{status.label}</span></header>
       <div className="digital-ticket-body"><section className="digital-ticket-event"><span className="eyebrow">{event?.category || 'YOUR EVENT'}</span><h1>{event?.title || `Event #${reservation.event_id}`}</h1><p><CalendarDays size={16} />{formatDate(event?.start_at || reservation.event?.start_at)}</p><p><MapPin size={16} />{location || 'Venue details are unavailable for this event.'}</p></section>
-        <div className="digital-ticket-stub"><span className="eyebrow">TICKET TYPE</span><h2>{item.ticket_type?.name || 'Event ticket'}</h2><dl><div><dt>Ticket reference</dt><dd>{ticket.reference}</dd></div><div><dt>Reservation</dt><dd>{reservation.reference}</dd></div><div><dt>Validity</dt><dd>{valid ? 'Valid' : 'Cancelled'}</dd></div><div><dt>Access state</dt><dd>{ticket.access_state?.replace('_', ' ').toLowerCase() || 'not entered'}</dd></div></dl></div></div>
+        <div className="digital-ticket-stub"><span className="eyebrow">TICKET TYPE</span><h2>{item.ticket_type?.name || 'Event ticket'}</h2><dl><div><dt>Ticket reference</dt><dd>{ticket.reference}</dd></div><div><dt>Reservation</dt><dd>{reservation.reference}</dd></div><div><dt>Validity</dt><dd>{status.label}</dd></div><div><dt>Access state</dt><dd>{ticket.access_state?.replace('_', ' ').toLowerCase() || 'not entered'}</dd></div></dl></div></div>
       {valid && <section className="ticket-qr-section" aria-labelledby="ticket-qr-title"><h2 id="ticket-qr-title">Your entry QR</h2><p>The same QR is used for ENTRY and EXIT. Show it to event staff at the gate.</p>
         {credentialLoading && <div className="ticket-qr-state" role="status">Preparing your secure QR…</div>}
         {credentialError && <div className="ticketing-error" role="alert"><p>{credentialError}</p><button className="button button-outline" type="button" onClick={() => { setCredential({ key: '', token: '', error: '' }); setRetry((value) => value + 1) }}>Try again</button></div>}
         {!credentialLoading && !credentialError && token && <><div className="qr-code-frame"><QRCodeSVG value={token} size={256} level="M" includeMargin title={`Admission QR for ${ticket.reference}`} /></div><strong className="qr-ticket-reference">{ticket.reference}</strong><button className="button button-outline" type="button" onClick={() => setConfirmReissue(true)}><RefreshCw size={15} /> Re-issue QR</button></>}
       </section>}
-      {!valid && <p className="ticketing-note ticket-invalid-note">This ticket is cancelled or no longer valid. QR credentials are unavailable.</p>}
+      {!valid && <p className="ticketing-note ticket-invalid-note">{status.label === 'Pending payment' ? 'Complete checkout before this ticket becomes valid.' : `${status.label} tickets cannot display QR credentials.`}</p>}
     </article>
     {confirmReissue && <ConfirmationDialog title="Re-issue this QR?" message="A new QR credential will be created. Any previously issued QR for this ticket will stop working immediately." confirmLabel="Re-issue QR" cancelLabel="Keep current QR" onCancel={() => setConfirmReissue(false)} onConfirm={reissue} />}
   </main>

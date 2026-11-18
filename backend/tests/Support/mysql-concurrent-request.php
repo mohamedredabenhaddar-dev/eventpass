@@ -3,6 +3,8 @@
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 require __DIR__.'/MySqlTestDatabaseGuard.php';
 
+use App\Models\Reservation;
+use App\Services\ReservationService;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -99,7 +101,14 @@ $dispatch = static function (string $method, string $uri, array $payload, string
     ];
 };
 
-$response = $dispatch($method, $uri, $payload, $bearer);
+$serviceResult = null;
+if (preg_match('#^/api/__integration/reservations/(\d+)/expire$#', $uri, $matches)) {
+    $reservation = Reservation::query()->findOrFail((int) $matches[1]);
+    $serviceResult = $app->make(ReservationService::class)->expire($reservation);
+    $response = ['status' => $serviceResult ? 200 : 204, 'body' => null];
+} else {
+    $response = $dispatch($method, $uri, $payload, $bearer);
+}
 $followupStatuses = null;
 if ($followup !== null && $response['status'] === 201) {
     $issuedQrToken = $response['body']['data']['qr_token'] ?? null;
@@ -137,6 +146,7 @@ fwrite(STDOUT, json_encode([
     'label' => $label,
     'status' => $response['status'],
     'followup_statuses' => $followupStatuses,
+    'service_result' => $serviceResult,
     'pid' => getmypid(),
     'connection_id' => $connectionId,
 ], JSON_THROW_ON_ERROR).PHP_EOL);
