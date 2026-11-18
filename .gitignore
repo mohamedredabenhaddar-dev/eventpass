@@ -1,0 +1,57 @@
+# Environment files: keep committed examples only
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and generated application builds
+**/vendor/
+**/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+**/.vite/
+
+# Laravel generated cache, logs, and runtime files
+backend/bootstrap/cache/*
+!backend/bootstrap/cache/.gitignore
+**/storage/logs/*
+!**/storage/logs/.gitignore
+**/storage/framework/cache/**
+**/storage/framework/sessions/**
+**/storage/framework/views/**
+
+# Test and debug artifacts
+**/.phpunit.cache/
+**/.phpunit.result.cache
+**/phpunit.result.cache
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local SQLite journals and backup files (database.sqlite remains ignored by backend/database/.gitignore)
+**/*.sqlite-journal
+**/*.sqlite-wal
+**/*.sqlite-shm
+**/*.sqlite-*
+**/*.sqlite.*.bak
+**/*.sqlite.bak
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+
+# IDE and editor files
+**/.idea/
+**/.fleet/
+**/.nova/
+**/.zed/
+**/*.swp
+**/*.swo
+**/*~
+
+# Operating system files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+**/Thumbs.db
+desktop.ini
+**/desktop.ini
