@@ -1,0 +1,15 @@
+{
+  "php*": "allow",
+  "composer*": "allow",
+  "npm*": "allow",
+  "npx*": "allow",
+  "node*": "allow",
+  "git status*": "allow",
+  "git diff*": "allow",
+  "git log*": "allow",
+  "git reset*": "deny",
+  "git clean*": "deny",
+  "git push*": "deny",
+  "taskkill*": "ask",
+  "Stop-Process*": "ask"
+}
