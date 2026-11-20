@@ -10,7 +10,11 @@ function EventsPage() {
   const selectedCategory = searchParams.get('category') || ''
   const [search, setSearch] = useState('')
   const [city, setCity] = useState('')
-  const { events, meta, loading, error, retry } = usePublicEvents(page)
+  const { events, meta, loading, error, retry } = usePublicEvents(page, {
+    search: search,
+    city: city,
+    category: selectedCategory,
+  })
   const categories = [...new Set(events.map((event) => event.category).filter(Boolean))].sort()
   const cities = [...new Set(events.map((event) => event.city).filter(Boolean))].sort()
   const visibleEvents = useMemo(() => events.filter((event) => {
@@ -24,11 +28,11 @@ function EventsPage() {
   return <section className="events-page page-container">
     <div className="events-page-heading"><span className="eyebrow">OUT THERE, WAITING</span><h1>Find your <em>something.</em></h1><p>Published events, straight from EventPass.</p></div>
     <div className="event-filters">
-      <label className="event-search"><Search size={17} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this page’s events" aria-label="Search events on this page" /></label>
-      <label className="filter-select"><SlidersHorizontal size={15} /><select value={selectedCategory} onChange={(event) => changeCategory(event.target.value)} aria-label="Filter by category"><option value="">All categories on this page</option>{categories.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-      <label className="filter-select"><select value={city} onChange={(event) => setCity(event.target.value)} aria-label="Filter by city"><option value="">All cities on this page</option>{cities.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+      <label className="event-search"><Search size={17} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search events" aria-label="Search events" /></label>
+      <label className="filter-select"><SlidersHorizontal size={15} /><select value={selectedCategory} onChange={(event) => changeCategory(event.target.value)} aria-label="Filter by category"><option value="">All categories</option>{categories.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+      <label className="filter-select"><select value={city} onChange={(event) => setCity(event.target.value)} aria-label="Filter by city"><option value="">All cities</option>{cities.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
     </div>
-    <p className="filter-scope-note">Search, category, and city filters apply to the currently loaded page. The API does not currently provide server-side filters.</p>
+    <p className="filter-scope-note">Search, category, and city filters are applied server-side. Use the controls above to refine your search.</p>
     {loading && <div className="events-state" role="status">Loading published events…</div>}
     {error && <div className="events-state events-error" role="alert"><p>{error}</p><button className="button button-outline" type="button" onClick={retry}>Try again</button></div>}
     {!loading && !error && visibleEvents.length === 0 && <div className="events-empty"><span className="eyebrow">NOTHING HERE YET</span><h2>No events match those filters.</h2><p>Try another search or clear a filter to see more.</p><button className="button button-outline" type="button" onClick={() => { setSearch(''); setCity(''); changeCategory('') }}>Clear filters</button></div>}

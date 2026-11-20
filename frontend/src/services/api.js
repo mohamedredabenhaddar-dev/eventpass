@@ -1,10 +1,11 @@
 import axios from 'axios'
+import { resolveApiBaseUrl } from './apiBaseUrl.js'
 
 export const TOKEN_STORAGE_KEY = 'eventpass_access_token'
 export const AUTH_SESSION_EXPIRED_EVENT = 'eventpass:auth-session-expired'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api',
+  baseURL: resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL),
   headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
 })
 

@@ -1,7 +1,7 @@
 import api from './api.js'
 
-export async function fetchPublishedEvents(page = 1) {
-  const { data } = await api.get('/events', { params: { page } })
+export async function fetchPublishedEvents(page = 1, filters = {}) {
+  const { data } = await api.get('/events', { params: { page, ...filters } })
   return data
 }
 

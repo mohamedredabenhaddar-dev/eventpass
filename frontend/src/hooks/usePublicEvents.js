@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchPublishedEvents } from '../services/eventService.js'
 
-export function usePublicEvents(page = 1) {
+export function usePublicEvents(page = 1, filters = {}) {
   const [result, setResult] = useState({ key: null, payload: null, error: '' })
   const [attempt, setAttempt] = useState(0)
   const requestKey = `${page}:${attempt}`
+  const filtersKey = JSON.stringify(filters)
 
   useEffect(() => {
     let active = true
+    const activeFilters = JSON.parse(filtersKey)
 
-    fetchPublishedEvents(page)
+    fetchPublishedEvents(page, activeFilters)
       .then((payload) => {
         if (active) setResult({ key: requestKey, payload, error: '' })
       })
@@ -24,7 +26,7 @@ export function usePublicEvents(page = 1) {
       })
 
     return () => { active = false }
-  }, [page, requestKey])
+  }, [page, requestKey, filtersKey])
 
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
 

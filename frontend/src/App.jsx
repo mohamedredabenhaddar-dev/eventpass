@@ -10,6 +10,7 @@ import './styles/admin-applications.css'
 import './styles/admin-events.css'
 import './styles/admin-monitoring.css'
 import './styles/admin-users.css'
+import './styles/admin-activity.css'
 import './styles/organizer-application.css'
 
 const HomePage = lazy(() => import('./pages/public/HomePage.jsx'))
@@ -55,10 +56,12 @@ const OrganizerApplicationsPage = lazy(() => import('./pages/admin/OrganizerAppl
 const OrganizerApplicationDetailPage = lazy(() => import('./pages/admin/OrganizerApplicationDetailPage.jsx'))
 const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage.jsx'))
 const AdminUserDetailPage = lazy(() => import('./pages/admin/AdminUserDetailPage.jsx'))
+const AdminStaffProvisioningPage = lazy(() => import('./pages/admin/AdminStaffProvisioningPage.jsx'))
 const AdminEventsPage = lazy(() => import('./pages/admin/AdminEventsPage.jsx'))
 const AdminEventDetailPage = lazy(() => import('./pages/admin/AdminEventDetailPage.jsx'))
 const AdminTicketTypeDetailPage = lazy(() => import('./pages/admin/AdminTicketTypeDetailPage.jsx'))
 const AdminAccessPage = lazy(() => import('./pages/admin/AdminAccessPage.jsx'))
+const AdminActivityHistoryPage = lazy(() => import('./pages/admin/AdminActivityHistoryPage.jsx'))
 
 function LazyPageFallback() {
   return (
@@ -120,9 +123,11 @@ function App() {
               <Route path="dashboard" element={<AdminOverviewPage />} />
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="users/:id" element={<AdminUserDetailPage />} />
+              <Route path="staff-provisioning" element={<AdminStaffProvisioningPage />} />
               <Route path="events" element={<AdminEventsPage />} />
               <Route path="events/:eventId" element={<AdminEventDetailPage />} />
               <Route path="access" element={<AdminAccessPage />} />
+              <Route path="activity" element={<AdminActivityHistoryPage />} />
               <Route path="organizer-applications" element={<OrganizerApplicationsPage />} />
               <Route path="organizer-applications/:id" element={<OrganizerApplicationDetailPage />} />
               <Route path="ticket-types" element={<AdminTicketTypesPage />} />

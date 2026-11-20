@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, CalendarDays, ClipboardList, LayoutDashboard, LogOut, Menu, Ticket, UserRound, UserRoundCog, X } from 'lucide-react'
+import { Activity, CalendarDays, ClipboardList, History, LayoutDashboard, LogOut, Menu, Ticket, UserRound, UserRoundCog, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import BrandMark from '../components/BrandMark.jsx'
 import { useAuth } from '../hooks/useAuth.js'
@@ -13,6 +13,7 @@ function SuperAdminLayout() {
     : location.pathname.includes('/users') ? 'Users'
     : location.pathname.includes('/events') ? 'Events'
     : location.pathname.includes('/access') ? 'Access Monitoring'
+    : location.pathname.includes('/activity') ? 'Activity History'
     : location.pathname.includes('ticket-types') ? 'Ticket Types'
       : location.pathname.includes('reservations') ? 'Reservations' : 'Overview'
   const signOut = async () => { try { await logout() } catch { /* The auth context clears the local token even if the API is unreachable. */ } finally { navigate('/login', { replace: true }) } }
@@ -26,6 +27,7 @@ function SuperAdminLayout() {
       <NavLink to="/admin/reservations" onClick={() => setOpen(false)}><ClipboardList size={17} /> Reservations</NavLink>
       <NavLink to="/admin/ticket-types" onClick={() => setOpen(false)}><Ticket size={17} /> Ticket types</NavLink>
       <NavLink to="/admin/access" onClick={() => setOpen(false)}><Activity size={17} /> Access monitoring</NavLink>
+      <NavLink to="/admin/activity" onClick={() => setOpen(false)}><History size={17} /> Activity history</NavLink>
     </nav><small className="admin-foot">SUPER ADMIN WORKSPACE</small></aside>
     <div className="admin-main"><header className="admin-topbar"><button className="admin-menu" aria-label="Open navigation" aria-expanded={open} onClick={() => setOpen(true)}><Menu size={20} /></button><span>Super Admin <i>/</i> {pageTitle}</span><div><strong>{user?.name || 'Administrator'}</strong><button className="button button-outline button-small" type="button" onClick={signOut}><LogOut size={15} /> Log out</button></div></header><main className="ticketing-page admin-content"><Outlet /></main></div>
   </div>
