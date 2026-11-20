@@ -14,7 +14,9 @@ use App\Http\Controllers\Api\OrganizerTicketTypeController;
 use App\Http\Controllers\Api\PublicEventController;
 use App\Http\Controllers\Api\PublicTicketTypeController;
 use App\Http\Controllers\Api\StaffAssignedEventController;
+use App\Http\Controllers\Api\StaffProvisioningController;
 use App\Http\Controllers\Api\StaffScanController;
+use App\Http\Controllers\Api\SuperAdminAuditEventController;
 use App\Http\Controllers\Api\SuperAdminDashboardStatisticsController;
 use App\Http\Controllers\Api\SuperAdminEventController;
 use App\Http\Controllers\Api\SuperAdminEventStaffController;
@@ -66,11 +68,13 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     });
 
     Route::prefix('super-admin')->middleware('role:'.UserRole::SuperAdmin->value)->group(function () {
+        Route::get('/audit-events', [SuperAdminAuditEventController::class, 'index']);
         Route::get('/dashboard/statistics', [SuperAdminDashboardStatisticsController::class, 'show']);
         Route::get('/users', [SuperAdminUserController::class, 'index']);
         Route::get('/users/{user}', [SuperAdminUserController::class, 'show'])->whereNumber('user');
         Route::patch('/users/{user}/suspend', [SuperAdminUserController::class, 'suspend'])->whereNumber('user');
         Route::patch('/users/{user}/reactivate', [SuperAdminUserController::class, 'reactivate'])->whereNumber('user');
+        Route::post('/staff/provision', [StaffProvisioningController::class, 'provision']);
 
         Route::get('/organizer-requests', [SuperAdminOrganizerRequestController::class, 'index']);
         Route::get('/organizer-requests/{id}', [SuperAdminOrganizerRequestController::class, 'show'])

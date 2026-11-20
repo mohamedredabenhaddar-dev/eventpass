@@ -9,6 +9,7 @@ use App\Http\Requests\StoreEventRequest;
 use App\Http\Requests\UpdateEventRequest;
 use App\Http\Resources\EventResource;
 use App\Models\Event;
+use App\Services\AuditRecorder;
 use App\Services\EventCapacityService;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ class OrganizerEventController extends Controller
         return EventResource::collection($events);
     }
 
-    public function store(StoreEventRequest $request): EventResource
+    public function store(StoreEventRequest $request, AuditRecorder $audit): EventResource
     {
         $validated = $request->validated();
         $base = $this->slugBase($validated['title']);
@@ -38,10 +39,20 @@ class OrganizerEventController extends Controller
             }
 
             try {
-                $event = new Event($validated);
-                $event->slug = $slug;
-                $event->organizer()->associate($request->user());
-                $event->save();
+                $event = DB::transaction(function () use ($request, $validated, $slug, $audit) {
+                    $event = new Event($validated);
+                    $event->slug = $slug;
+                    $event->organizer()->associate($request->user());
+                    $event->save();
+
+                    $audit->recordUserAction($request->user(), 'event.created', $event->getKey(), metadata: [
+                        // The database supplies the draft default, which is not
+                        // hydrated onto a new model instance after insert.
+                        'status' => $event->status?->value ?? EventStatus::Draft->value,
+                    ]);
+
+                    return $event;
+                });
 
                 return new EventResource($event->refresh()->load('organizer:id,name'));
             } catch (UniqueConstraintViolationException $exception) {
@@ -64,7 +75,7 @@ class OrganizerEventController extends Controller
         return new EventResource($event->load('organizer:id,name'));
     }
 
-    public function update(UpdateEventRequest $request, Event $event, EventCapacityService $capacity): EventResource
+    public function update(UpdateEventRequest $request, Event $event, EventCapacityService $capacity, AuditRecorder $audit): EventResource
     {
         $validated = $request->validated();
         $current = $this->ownedEvent($request, $event);
@@ -79,7 +90,7 @@ class OrganizerEventController extends Controller
             }
 
             try {
-                $event = DB::transaction(function () use ($request, $current, $validated, $slug, $capacity) {
+                $event = DB::transaction(function () use ($request, $current, $validated, $slug, $capacity, $audit) {
                     $locked = Event::query()->lockForUpdate()->findOrFail($current->id);
                     abort_unless($locked->organizer_id === $request->user()->getKey(), 404);
                     abort_unless(! in_array($locked->status, [EventStatus::Suspended, EventStatus::Cancelled], true), 409, 'This event cannot be edited in its current status.');
@@ -102,9 +113,32 @@ class OrganizerEventController extends Controller
                         }
                     }
 
+                    $previousCapacity = (int) $locked->capacity;
                     $locked->fill($validated);
                     $locked->slug = $slug;
+
+                    $dirty = array_keys($locked->getDirty());
+                    $changedFields = array_values(array_intersect(array_keys($validated), $dirty));
+                    if (in_array('title', $changedFields, true) && $locked->isDirty('slug')) {
+                        $changedFields[] = 'slug';
+                    }
+                    $changedFields = array_values(array_unique($changedFields));
+                    $capacityChanged = in_array('capacity', $changedFields, true);
                     $locked->save();
+
+                    if ($changedFields !== []) {
+                        if ($capacityChanged) {
+                            $audit->recordUserAction($request->user(), 'event.capacity_changed', $locked->getKey(), metadata: [
+                                'previous_capacity' => $previousCapacity,
+                                'new_capacity' => (int) $locked->capacity,
+                                'changed_fields' => $changedFields,
+                            ]);
+                        } else {
+                            $audit->recordUserAction($request->user(), 'event.updated', $locked->getKey(), metadata: [
+                                'changed_fields' => $changedFields,
+                            ]);
+                        }
+                    }
 
                     return $locked;
                 });
@@ -122,15 +156,22 @@ class OrganizerEventController extends Controller
         abort(409, 'A unique event slug could not be generated.');
     }
 
-    public function publish(Request $request, Event $event): EventResource
+    public function publish(Request $request, Event $event, AuditRecorder $audit): EventResource
     {
-        $event = DB::transaction(function () use ($request, $event) {
+        $event = DB::transaction(function () use ($request, $event, $audit) {
             $event = Event::query()->lockForUpdate()->findOrFail($event->id);
             abort_unless($event->organizer_id === $request->user()->getKey(), 404);
             abort_unless($event->status === EventStatus::Draft, 409, 'Only draft events can be published.');
 
+            $previousStatus = $event->status->value;
+
             $event->status = EventStatus::Published;
             $event->save();
+
+            $audit->recordUserAction($request->user(), 'event.published', $event->getKey(), metadata: [
+                'previous_status' => $previousStatus,
+                'new_status' => EventStatus::Published->value,
+            ]);
 
             return $event;
         });
@@ -138,15 +179,22 @@ class OrganizerEventController extends Controller
         return new EventResource($event->refresh()->load('organizer:id,name'));
     }
 
-    public function unpublish(Request $request, Event $event): EventResource
+    public function unpublish(Request $request, Event $event, AuditRecorder $audit): EventResource
     {
-        $event = DB::transaction(function () use ($request, $event) {
+        $event = DB::transaction(function () use ($request, $event, $audit) {
             $event = Event::query()->lockForUpdate()->findOrFail($event->id);
             abort_unless($event->organizer_id === $request->user()->getKey(), 404);
             abort_unless($event->status === EventStatus::Published, 409, 'Only published events can be unpublished.');
 
+            $previousStatus = $event->status->value;
+
             $event->status = EventStatus::Draft;
             $event->save();
+
+            $audit->recordUserAction($request->user(), 'event.unpublished', $event->getKey(), metadata: [
+                'previous_status' => $previousStatus,
+                'new_status' => EventStatus::Draft->value,
+            ]);
 
             return $event;
         });
@@ -154,16 +202,23 @@ class OrganizerEventController extends Controller
         return new EventResource($event->refresh()->load('organizer:id,name'));
     }
 
-    public function cancel(CancelEventRequest $request, Event $event): EventResource
+    public function cancel(CancelEventRequest $request, Event $event, AuditRecorder $audit): EventResource
     {
-        $event = DB::transaction(function () use ($request, $event) {
+        $event = DB::transaction(function () use ($request, $event, $audit) {
             $event = Event::query()->lockForUpdate()->findOrFail($event->id);
             abort_unless($event->organizer_id === $request->user()->getKey(), 404);
             abort_unless(! in_array($event->status, [EventStatus::Suspended, EventStatus::Cancelled], true), 409, 'Suspended or cancelled events cannot be changed by organizers.');
 
+            $previousStatus = $event->status->value;
+
             $event->status = EventStatus::Cancelled;
             $event->cancellation_reason = $request->validated('cancellation_reason');
             $event->save();
+
+            $audit->recordUserAction($request->user(), 'event.cancelled', $event->getKey(), metadata: [
+                'previous_status' => $previousStatus,
+                'new_status' => EventStatus::Cancelled->value,
+            ]);
 
             return $event;
         });

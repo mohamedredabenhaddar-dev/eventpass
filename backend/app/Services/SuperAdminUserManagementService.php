@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 class SuperAdminUserManagementService
 {
+    public function __construct(private readonly AuditRecorder $audit) {}
+
     public function suspend(User $actor, User $target, string $reason): User
     {
         return DB::transaction(function () use ($actor, $target, $reason) {
@@ -20,6 +22,9 @@ class SuperAdminUserManagementService
 
             $lockedTarget = User::query()->lockForUpdate()->findOrFail($target->getKey());
             abort_if($lockedTarget->account_status === AccountStatus::Suspended, 409, 'This account is already suspended.');
+
+            $previousStatus = $lockedTarget->account_status->value;
+            $targetRole = $lockedTarget->role->value;
 
             if ($lockedTarget->role === UserRole::SuperAdmin) {
                 abort_if($activeAdmins->count() <= 1, 409, 'The last active Super Admin cannot be suspended.');
@@ -35,6 +40,12 @@ class SuperAdminUserManagementService
             // Revoke existing credentials in addition to centrally rejecting suspended accounts.
             $lockedTarget->tokens()->delete();
 
+            $this->audit->recordUserAction($lockedActor, 'user.suspended', $lockedTarget->getKey(), metadata: [
+                'previous_status' => $previousStatus,
+                'new_status' => AccountStatus::Suspended->value,
+                'target_role' => $targetRole,
+            ]);
+
             return $lockedTarget->refresh();
         }, attempts: 3);
     }
@@ -49,12 +60,21 @@ class SuperAdminUserManagementService
             $lockedTarget = User::query()->lockForUpdate()->findOrFail($target->getKey());
             abort_if($lockedTarget->account_status === AccountStatus::Active, 409, 'This account is already active.');
 
+            $previousStatus = $lockedTarget->account_status->value;
+            $targetRole = $lockedTarget->role->value;
+
             $lockedTarget->forceFill([
                 'account_status' => AccountStatus::Active,
                 'suspended_at' => null,
                 'suspended_by' => null,
                 'suspension_reason' => null,
             ])->save();
+
+            $this->audit->recordUserAction($lockedActor, 'user.reactivated', $lockedTarget->getKey(), metadata: [
+                'previous_status' => $previousStatus,
+                'new_status' => AccountStatus::Active->value,
+                'target_role' => $targetRole,
+            ]);
 
             return $lockedTarget->refresh();
         }, attempts: 3);

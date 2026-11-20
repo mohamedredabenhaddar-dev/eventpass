@@ -19,7 +19,10 @@ use Illuminate\Validation\ValidationException;
 
 class ReservationService
 {
-    public function __construct(private readonly EventCapacityService $capacity) {}
+    public function __construct(
+        private readonly EventCapacityService $capacity,
+        private readonly AuditRecorder $audit,
+    ) {}
 
     /** @param list<array{ticket_type_id:int, quantity:int}> $items */
     public function create(User $user, Event $event, array $items): Reservation
@@ -120,6 +123,12 @@ class ReservationService
             $reservation->total = $this->centsToMoney($totalCents);
             $reservation->save();
 
+            $this->audit->recordUserAction($user, 'reservation.created', $reservation->getKey(), metadata: [
+                'event_id' => $lockedEvent->getKey(),
+                'item_count' => count($items),
+                'total_quantity' => $requestedQuantity,
+            ]);
+
             return $reservation;
         }, attempts: 3);
 
@@ -177,6 +186,12 @@ class ReservationService
                 ->whereIn('status', [TicketStatus::Valid->value, TicketStatus::Pending->value])
                 ->update(['status' => TicketStatus::Cancelled->value, 'updated_at' => Carbon::now()]);
 
+            $this->audit->recordUserAction($user, 'reservation.cancelled', $lockedReservation->getKey(), metadata: [
+                'event_id' => $event->getKey(),
+                'item_count' => $items->count(),
+                'total_quantity' => (int) $items->sum('quantity'),
+            ]);
+
             return $lockedReservation;
         }, attempts: 3);
 
@@ -220,6 +235,13 @@ class ReservationService
             $locked->payments()->where('status', 'pending')->update(['status' => 'expired', 'updated_at' => now()]);
             $locked->tickets()->where('status', TicketStatus::Pending->value)
                 ->update(['status' => TicketStatus::Cancelled->value, 'updated_at' => now()]);
+
+            $this->audit->recordSystemAction('reservation.expired', $locked->getKey(), metadata: [
+                'event_id' => $event->getKey(),
+                'item_count' => $items->count(),
+                'total_quantity' => (int) $items->sum('quantity'),
+                'source' => 'reservations:expire-pending',
+            ]);
 
             return true;
         }, attempts: 3);

@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateTicketTypeRequest;
 use App\Http\Resources\TicketTypeResource;
 use App\Models\Event;
 use App\Models\TicketType;
+use App\Services\AuditRecorder;
 use App\Services\EventCapacityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,9 +24,9 @@ class OrganizerTicketTypeController extends Controller
         return TicketTypeResource::collection($event->ticketTypes()->orderBy('id')->paginate(20));
     }
 
-    public function store(StoreTicketTypeRequest $request, Event $event, EventCapacityService $capacity): TicketTypeResource
+    public function store(StoreTicketTypeRequest $request, Event $event, EventCapacityService $capacity, AuditRecorder $audit): TicketTypeResource
     {
-        $ticketType = DB::transaction(function () use ($request, $event, $capacity) {
+        $ticketType = DB::transaction(function () use ($request, $event, $capacity, $audit) {
             $lockedEvent = Event::query()->lockForUpdate()->findOrFail($event->id);
             $this->assertOwnerAndEditable($request->user()->getKey(), $lockedEvent);
 
@@ -41,6 +42,12 @@ class OrganizerTicketTypeController extends Controller
             $ticketType->is_active = $request->validated('is_active', true);
             $lockedEvent->ticketTypes()->save($ticketType);
 
+            $audit->recordUserAction($request->user(), 'ticket_type.created', $ticketType->getKey(), metadata: [
+                'event_id' => $lockedEvent->getKey(),
+                'quantity' => (int) $ticketType->quantity,
+                'is_active' => (bool) $ticketType->is_active,
+            ]);
+
             return $ticketType;
         });
 
@@ -54,9 +61,9 @@ class OrganizerTicketTypeController extends Controller
         return new TicketTypeResource($ticketType->load('event:id,title,slug'));
     }
 
-    public function update(UpdateTicketTypeRequest $request, Event $event, TicketType $ticketType, EventCapacityService $capacity): TicketTypeResource
+    public function update(UpdateTicketTypeRequest $request, Event $event, TicketType $ticketType, EventCapacityService $capacity, AuditRecorder $audit): TicketTypeResource
     {
-        $updated = DB::transaction(function () use ($request, $event, $ticketType, $capacity) {
+        $updated = DB::transaction(function () use ($request, $event, $ticketType, $capacity, $audit) {
             $lockedEvent = Event::query()->lockForUpdate()->findOrFail($event->id);
             $this->assertOwnerAndEditable($request->user()->getKey(), $lockedEvent);
             $lockedType = TicketType::query()
@@ -76,9 +83,27 @@ class OrganizerTicketTypeController extends Controller
                 ]);
             }
 
+            $wasActive = (bool) $lockedType->is_active;
             $lockedType->fill($validated);
             $lockedType->available_quantity = $newQuantity - $reserved;
+
+            $dirty = array_keys($lockedType->getDirty());
+            $changedFields = array_values(array_intersect(array_keys($validated), $dirty));
+            if (in_array('quantity', $changedFields, true) && in_array('available_quantity', $dirty, true)) {
+                $changedFields[] = 'available_quantity';
+            }
+            $changedFields = array_values(array_unique($changedFields));
             $lockedType->save();
+
+            if ($changedFields !== []) {
+                $action = $wasActive && ! (bool) $lockedType->is_active
+                    ? 'ticket_type.deactivated'
+                    : 'ticket_type.updated';
+                $audit->recordUserAction($request->user(), $action, $lockedType->getKey(), metadata: [
+                    'event_id' => $lockedEvent->getKey(),
+                    'changed_fields' => $changedFields,
+                ]);
+            }
 
             return $lockedType;
         });
@@ -86,9 +111,9 @@ class OrganizerTicketTypeController extends Controller
         return new TicketTypeResource($updated->refresh()->load('event:id,title,slug'));
     }
 
-    public function destroy(Request $request, Event $event, TicketType $ticketType)
+    public function destroy(Request $request, Event $event, TicketType $ticketType, AuditRecorder $audit)
     {
-        DB::transaction(function () use ($request, $event, $ticketType) {
+        DB::transaction(function () use ($request, $event, $ticketType, $audit) {
             $lockedEvent = Event::query()->lockForUpdate()->findOrFail($event->id);
             $this->assertOwnerAndEditable($request->user()->getKey(), $lockedEvent);
             $lockedType = TicketType::query()
@@ -98,6 +123,10 @@ class OrganizerTicketTypeController extends Controller
 
             abort_if($lockedType->reservationItems()->exists(), 409, 'A ticket type with reservation history cannot be deleted.');
             $lockedType->delete();
+
+            $audit->recordUserAction($request->user(), 'ticket_type.deleted', $lockedType->getKey(), metadata: [
+                'event_id' => $lockedEvent->getKey(),
+            ]);
         });
 
         return response()->json(['message' => 'Ticket type deleted.']);

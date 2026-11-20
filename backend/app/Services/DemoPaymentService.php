@@ -17,6 +17,8 @@ use Illuminate\Support\Str;
 /** Simulates payment outcomes locally. This service never contacts a payment provider. */
 class DemoPaymentService
 {
+    public function __construct(private readonly AuditRecorder $audit) {}
+
     public function createAttempt(User $user, Reservation $reservation): Payment
     {
         $snapshot = Reservation::query()->select(['id', 'event_id'])->findOrFail($reservation->id);
@@ -85,12 +87,33 @@ class DemoPaymentService
                     ->update(['status' => TicketStatus::Valid->value, 'updated_at' => now()]);
                 $reservation->payments()->where('id', '!=', $lockedPayment->id)->where('status', PaymentAttemptStatus::Pending->value)
                     ->update(['status' => PaymentAttemptStatus::Expired->value, 'updated_at' => now()]);
+
+                $this->audit->recordUserAction($user, 'demo_payment.simulation_succeeded', $lockedPayment->getKey(), metadata: [
+                    'reservation_id' => $reservation->getKey(),
+                    'payment_mode' => 'demo',
+                    'previous_status' => PaymentAttemptStatus::Pending->value,
+                    'new_status' => PaymentAttemptStatus::Succeeded->value,
+                ]);
+                $this->audit->recordUserAction($user, 'reservation.confirmed', $reservation->getKey(), metadata: [
+                    'event_id' => $event->getKey(),
+                    'payment_mode' => 'demo',
+                    'payment_id' => $lockedPayment->getKey(),
+                    'previous_status' => ReservationStatus::PendingPayment->value,
+                    'new_status' => ReservationStatus::Confirmed->value,
+                ]);
             } else {
                 $lockedPayment->status = PaymentAttemptStatus::Failed;
                 $lockedPayment->failure_reason = 'Demo payment was marked as failed by the client simulation.';
                 $lockedPayment->save();
                 $reservation->payment_status = PaymentStatus::Failed;
                 $reservation->save();
+
+                $this->audit->recordUserAction($user, 'demo_payment.simulation_failed', $lockedPayment->getKey(), outcome: 'failed', metadata: [
+                    'reservation_id' => $reservation->getKey(),
+                    'payment_mode' => 'demo',
+                    'previous_status' => PaymentAttemptStatus::Pending->value,
+                    'new_status' => PaymentAttemptStatus::Failed->value,
+                ]);
             }
 
             return $lockedPayment->load('reservation');

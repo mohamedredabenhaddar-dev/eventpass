@@ -30,10 +30,12 @@ class OrganizerRequestController extends Controller
 
             abort_unless(! $hasPending, 409, 'A pending organizer application already exists.');
 
-            return $user->organizerRequests()->create($request->validated());
-        });
+            $created = $user->organizerRequests()->create($request->validated());
 
-        $application->refresh()->load(['user:id,name,email', 'reviewer:id,name']);
+            $application = $created->refresh()->load(['user:id,name,email', 'reviewer:id,name']);
+
+            return $application;
+        });
 
         return (new OrganizerRequestResource($application))->response()->setStatusCode(201);
     }

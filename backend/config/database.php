@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\DatabaseUrl;
 use Illuminate\Support\Str;
 
 return [
@@ -44,7 +45,7 @@ return [
 
         'mysql' => [
             'driver' => 'mysql',
-            'url' => env('DB_URL'),
+            'url' => DatabaseUrl::withoutTimezoneOverride(env('DB_URL')),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'laravel'),
@@ -53,6 +54,7 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'timezone' => '+00:00',
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
@@ -64,7 +66,7 @@ return [
 
         'mariadb' => [
             'driver' => 'mariadb',
-            'url' => env('DB_URL'),
+            'url' => DatabaseUrl::withoutTimezoneOverride(env('DB_URL')),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'laravel'),
@@ -73,6 +75,7 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'timezone' => '+00:00',
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
