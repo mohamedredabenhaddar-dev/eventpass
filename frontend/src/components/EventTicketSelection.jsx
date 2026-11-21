@@ -97,9 +97,10 @@ function EventTicketSelection({ event }) {
         <button className="button button-outline button-small" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button>
       </div>}
       {!loading && !error && ticketTypes.length === 0 && <div className="ticketing-empty">There are no tickets available right now.</div>}
-      {!loading && !error && selected.length > 0 && (
+      {!loading && !error && ticketTypes.length > 0 && (
         <div className="ticket-type-options">
-          {selected.map(({ ticketType, quantity }) => {
+          {ticketTypes.map((ticketType) => {
+            const quantity = quantities[ticketType.id] || 0
             const available = ticketType.available_quantity
             const max = Math.min(1000, available)
             return (
@@ -111,9 +112,9 @@ function EventTicketSelection({ event }) {
                 <div className="ticket-type-purchase">
                   <strong>{money(ticketType.price)}</strong>
                   <div className="quantity-stepper" aria-label={`Quantity for ${ticketType.name}`}>
-                    <button type="button" aria-label={`Remove one ${ticketType.name}`} onClick={() => setQuantity(ticketType, -1)} disabled={quantity <= 0}><Minus size={14} /></button>
+                    <button type="button" aria-label={`Remove one ${ticketType.name}`} onClick={() => setQuantity(ticketType, quantity - 1)} disabled={quantity <= 0}><Minus size={14} /></button>
                     <input type="number" min="0" max={max} step="1" value={quantity} aria-label={`${ticketType.name} quantity`} onChange={(change) => setQuantity(ticketType, change.target.value)} />
-                    <button type="button" aria-label={`Add one ${ticketType.name}`} onClick={() => setQuantity(ticketType, 1)} disabled={quantity >= max}><Plus size={14} /></button>
+                    <button type="button" aria-label={`Add one ${ticketType.name}`} onClick={() => setQuantity(ticketType, quantity + 1)} disabled={quantity >= max}><Plus size={14} /></button>
                   </div>
                 </div>
               </article>

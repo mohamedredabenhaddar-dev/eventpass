@@ -10,7 +10,7 @@ class TicketPdfService
     /**
      * Generate a standards-compliant PDF for a ticket (pure PHP, no external deps).
      */
-    public function generate(Model $event, Model $ticket): string
+    public function generate(Model $event, Model $ticket, ?string $qrToken = null): string
     {
         $status = $ticket->status?->value ?? (string) $ticket->status;
         $accessState = $ticket->access_state?->value ?? (string) ($ticket->access_state ?? 'NOT_ENTERED');
@@ -36,7 +36,39 @@ class TicketPdfService
             $stream .= '('.$this->escape($line).") Tj\n";
             $firstLine = false;
         }
-        $stream .= 'ET';
+        $stream .= "ET\n";
+
+        $tokenToEncode = $qrToken ?: ($ticket->reference ? 'VERIFY-QR-'.$ticket->reference : null);
+        if ($tokenToEncode) {
+            try {
+                $matrix = QrCodeService::getMatrix($tokenToEncode, 'm');
+                $rows = count($matrix);
+                $cols = $rows > 0 ? count($matrix[0]) : 0;
+
+                if ($rows > 0 && $cols > 0) {
+                    $qrX = 40.0;
+                    $qrTopY = 525.0;
+                    $moduleSize = 3.6;
+
+                    $stream .= "0 0 0 rg\n";
+                    for ($r = 0; $r < $rows; $r++) {
+                        for ($c = 0; $c < $cols; $c++) {
+                            if (! empty($matrix[$r][$c])) {
+                                $mx = $qrX + $c * $moduleSize;
+                                $my = $qrTopY - ($r + 1) * $moduleSize;
+                                $stream .= sprintf("%.2f %.2f %.2f %.2f re\n", $mx, $my, $moduleSize, $moduleSize);
+                            }
+                        }
+                    }
+                    $stream .= "f\n";
+
+                    $qrBottomY = $qrTopY - ($rows * $moduleSize) - 16;
+                    $stream .= "BT\n/F1 9 Tf\n40 ".sprintf('%.2f', $qrBottomY)." Td\n(Scan this QR code at the event gate for ENTRY and EXIT) Tj\nET\n";
+                }
+            } catch (\Throwable) {
+                // Graceful fallback without QR code
+            }
+        }
 
         $objects = [
             1 => '<< /Type /Catalog /Pages 2 0 R >>',

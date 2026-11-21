@@ -31,7 +31,18 @@ class TicketPdfController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        $pdfContent = $this->pdfService->generate($event, $ticket);
+        $qrToken = null;
+        if ($ticket->status->value === 'valid' && $ticket->reservation?->status->value === 'confirmed') {
+            try {
+                $owner = $ticket->reservation->user ?? $user;
+                $credential = app(\App\Services\TicketCredentialService::class)->issueForOwner($owner, $ticket);
+                $qrToken = $credential['qr_token'] ?? null;
+            } catch (\Throwable) {
+                $qrToken = null;
+            }
+        }
+
+        $pdfContent = $this->pdfService->generate($event, $ticket, $qrToken);
 
         return response()->json([], 200, [
             'Content-Type' => 'application/pdf',

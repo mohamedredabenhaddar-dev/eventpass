@@ -38,7 +38,7 @@ function EventDetailPage() {
   const event = loading ? null : result.event
   const error = loading ? '' : result.error
   if (loading) return <main className="event-detail-page page-container"><div className="events-state" role="status">Loading event details…</div></main>
-  if (error) return <main className="event-detail-page page-container"><div className="events-empty" role="alert"><span className="eyebrow">EVENT UNAVAILABLE</span><h1>We couldn’t open this event.</h1><p>{error}</p><div className="detail-actions"><button className="button button-outline" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button><Link className="button button-primary" to="/events">Browse events</Link></div></div></main>
+  if (error) return <main className="event-detail-page page-container"><div className="events-empty" role="alert"><span className="eyebrow">EVENT UNAVAILABLE</span><h1>We couldn't open this event.</h1><p>{error}</p><div className="detail-actions"><button className="button button-outline" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button><Link className="button button-primary" to="/events">Browse events</Link></div></div></main>
   if (!event) return null
 
   const location = [event.venue_name, event.address, event.city, event.country].filter(Boolean)
