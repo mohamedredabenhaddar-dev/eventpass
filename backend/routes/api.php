@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ClientTicketCredentialController;
 use App\Http\Controllers\Api\EventAccessReportController;
 use App\Http\Controllers\Api\OrganizerEventController;
 use App\Http\Controllers\Api\OrganizerEventStaffController;
+use App\Http\Controllers\Api\OrganizerProfileController;
 use App\Http\Controllers\Api\OrganizerRequestController;
 use App\Http\Controllers\Api\OrganizerReservationController;
 use App\Http\Controllers\Api\OrganizerTicketTypeController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Api\SuperAdminOrganizerRequestController;
 use App\Http\Controllers\Api\SuperAdminReservationController;
 use App\Http\Controllers\Api\SuperAdminTicketTypeController;
 use App\Http\Controllers\Api\SuperAdminUserController;
+use App\Http\Controllers\Api\TicketPdfController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -59,6 +61,8 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
         Route::post('/events/{event}/reservations', [ClientReservationController::class, 'store'])->whereNumber('event');
         Route::post('/tickets/{ticket}/qr-credential', [ClientTicketCredentialController::class, 'store'])
             ->whereNumber('ticket')->middleware('throttle:qr-credentials');
+        Route::get('/tickets/{ticket}/pdf', [TicketPdfController::class, 'download'])
+            ->whereNumber('ticket')->middleware('throttle:staff-scans');
     });
 
     Route::middleware('role:'.UserRole::Staff->value)->prefix('staff')->group(function () {
@@ -107,8 +111,11 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
         Route::get('/events/{event}/reservations', [OrganizerReservationController::class, 'index'])->whereNumber('event');
         Route::get('/events/{event}/reservations/{reservation}', [OrganizerReservationController::class, 'show'])->whereNumber('event')->whereNumber('reservation');
         Route::get('/events/{event}/staff', [OrganizerEventStaffController::class, 'index'])->whereNumber('event');
+        Route::get('/events/{event}/staff/available', [OrganizerEventStaffController::class, 'available'])->whereNumber('event');
         Route::post('/events/{event}/staff', [OrganizerEventStaffController::class, 'store'])->whereNumber('event');
         Route::delete('/events/{event}/staff/{assignment}', [OrganizerEventStaffController::class, 'destroy'])->whereNumber('event')->whereNumber('assignment');
+        Route::get('/profile', [OrganizerProfileController::class, 'show']);
+        Route::put('/profile', [OrganizerProfileController::class, 'update']);
         Route::get('/events/{event}/access', [EventAccessReportController::class, 'organizer'])->whereNumber('event');
         Route::get('/events', [OrganizerEventController::class, 'index']);
         Route::post('/events', [OrganizerEventController::class, 'store']);

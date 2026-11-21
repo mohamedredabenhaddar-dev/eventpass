@@ -11,9 +11,11 @@ $setEnvironment = static function (string $name, string $value): void {
 
 foreach ([
     'APP_ENV' => 'testing',
+    'CACHE_STORE' => 'array',
     'DB_CONNECTION' => 'sqlite',
     'DB_DATABASE' => ':memory:',
     'DB_URL' => '',
+    'SESSION_DRIVER' => 'array',
 ] as $name => $value) {
     $setEnvironment($name, $value);
 }

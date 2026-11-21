@@ -1,12 +1,51 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowUpRight, CalendarDays, MapPin, Ticket } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, MapPin, Ticket, Download } from 'lucide-react'
 import { fetchMyReservations } from '../../services/ticketingService.js'
+import api from '../../services/api.js'
 
 function formatDate(value) {
   if (!value) return 'Date unavailable'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString()
+}
+
+function DownloadPdfButton({ ticket }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleDownload = async () => {
+    if (loading) return
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.get(`/tickets/${ticket.id}/pdf`, { responseType: 'blob' })
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `eventpass-ticket-${ticket.reference || ticket.id}.pdf`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      const data = err?.response?.data
+      const message = data && typeof data === 'object' && 'message' in data
+        ? String(data.message)
+        : 'We could not complete that request. Please try again.'
+      setError(message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      <button className="button button-primary button-small ticket-download-button" type="button" disabled={loading} onClick={handleDownload}>
+        <Download size={14} />{loading ? 'Downloading…' : 'Download PDF'}
+      </button>
+      {error && <p className="ticketing-error download-error" role="alert">{error}</p>}
+    </>
+  )
 }
 
 function MyTicketsPage() {
@@ -68,7 +107,7 @@ function MyTicketsPage() {
           <div className="client-ticket-facts"><p><CalendarDays size={15} />{formatDate(event?.start_at || reservation.event?.start_at)}</p><p><MapPin size={15} />{location || 'Venue details unavailable'}</p></div>
           <dl><div><dt>Ticket</dt><dd>{item.ticket_type?.name || 'Ticket type'}</dd></div><div><dt>Ticket reference</dt><dd>{ticket.reference}</dd></div><div><dt>Reservation</dt><dd>{reservation.reference}</dd></div></dl>
         </div>
-        <div className="client-ticket-side"><span className={`ticket-status status-${valid ? 'valid' : 'cancelled'}`}>{ticketLabel}</span><span className="ticket-status">{ticket.access_state?.replace('_', ' ').toLowerCase() || 'not entered'}</span>{reservation.status === 'pending_payment' && <Link className="button button-primary button-small" to={`/client/checkout/${reservation.id}`}>Continue checkout</Link>}<Link className="button button-outline button-small" to={`/my-tickets/${reservation.id}/${ticket.id}`}>Open ticket <ArrowUpRight size={14} /></Link></div>
+        <div className="client-ticket-side"><span className={`ticket-status status-${valid ? 'valid' : 'cancelled'}`}>{ticketLabel}</span><span className="ticket-status">{ticket.access_state?.replace('_', ' ').toLowerCase() || 'not entered'}</span>{reservation.status === 'pending_payment' && <Link className="button button-primary button-small" to={`/client/checkout/${reservation.id}`}>Continue checkout</Link>}<DownloadPdfButton ticket={ticket} /> <Link className="button button-outline button-small" to={`/my-tickets/${reservation.id}/${ticket.id}`}>Open ticket <ArrowUpRight size={14} /></Link></div>
       </article>
     })}</div>}
     {!loading && !result.error && payload?.meta?.last_page > 1 && <nav className="ticketing-pagination" aria-label="Ticket pages"><button className="button button-outline" type="button" disabled={page <= 1} onClick={() => changePage(page - 1)}>Previous</button><span>Page {payload.meta.current_page} of {payload.meta.last_page}</span><button className="button button-outline" type="button" disabled={page >= payload.meta.last_page} onClick={() => changePage(page + 1)}>Next</button></nav>}

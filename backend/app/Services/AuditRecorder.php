@@ -45,6 +45,7 @@ class AuditRecorder
         'reservation.confirmed' => ['actor' => 'user', 'entity' => 'reservation', 'outcomes' => ['success'], 'required' => ['event_id', 'payment_mode', 'payment_id', 'previous_status', 'new_status'], 'optional' => [], 'fields' => ['event_id' => 'id', 'payment_mode' => 'demo', 'payment_id' => 'id', 'previous_status' => 'reservation_status', 'new_status' => 'reservation_status']],
         'demo_payment.simulation_succeeded' => ['actor' => 'user', 'entity' => 'payment', 'outcomes' => ['success'], 'required' => ['reservation_id', 'payment_mode', 'previous_status', 'new_status'], 'optional' => [], 'fields' => ['reservation_id' => 'id', 'payment_mode' => 'demo', 'previous_status' => 'payment_attempt_status', 'new_status' => 'payment_attempt_status']],
         'demo_payment.simulation_failed' => ['actor' => 'user', 'entity' => 'payment', 'outcomes' => ['failed'], 'required' => ['reservation_id', 'payment_mode', 'previous_status', 'new_status'], 'optional' => [], 'fields' => ['reservation_id' => 'id', 'payment_mode' => 'demo', 'previous_status' => 'payment_attempt_status', 'new_status' => 'payment_attempt_status']],
+        'organizer_profile.updated' => ['actor' => 'user', 'entity' => 'organizer_profile', 'outcomes' => ['success'], 'required' => [], 'optional' => [], 'fields' => []],
     ];
 
     /** @return array{actions:list<string>, actor_types:list<string>, entity_types:list<string>, outcomes:list<string>} */

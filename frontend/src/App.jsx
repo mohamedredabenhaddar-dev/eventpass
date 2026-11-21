@@ -30,6 +30,7 @@ const PaymentHistoryPage = lazy(() => import('./pages/client/PaymentHistoryPage.
 
 const OrganizerLayout = lazy(() => import('./layouts/OrganizerLayout.jsx'))
 const OrganizerOverviewPage = lazy(() => import('./pages/organizer/OrganizerOverviewPage.jsx'))
+const OrganizerProfilePage = lazy(() => import('./pages/organizer/OrganizerProfilePage.jsx'))
 const OrganizerEventsPage = lazy(() => import('./pages/organizer/OrganizerEventsPage.jsx'))
 const OrganizerEventFormPage = lazy(() => import('./pages/organizer/OrganizerEventFormPage.jsx'))
 const OrganizerEventDetailPage = lazy(() => import('./pages/organizer/OrganizerEventDetailPage.jsx'))
@@ -106,6 +107,7 @@ function App() {
             <Route path="/organizer" element={<ProtectedRoute roles={['organizer']}><OrganizerLayout /></ProtectedRoute>}>
               <Route index element={<Navigate to="/organizer/dashboard" replace />} />
               <Route path="dashboard" element={<OrganizerOverviewPage />} />
+              <Route path="profile" element={<OrganizerProfilePage />} />
               <Route path="events" element={<OrganizerEventsPage />} />
               <Route path="events/new" element={<OrganizerEventFormPage />} />
               <Route path="events/:id/edit" element={<OrganizerEventFormPage />} />

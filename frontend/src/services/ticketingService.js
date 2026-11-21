@@ -126,6 +126,14 @@ export async function fetchOrganizerEventStaff(eventId, page = 1) {
   return data
 }
 
+export async function fetchAvailableOrganizerEventStaff(eventId, search = '') {
+  const trimmed = String(search || '').trim()
+  const { data } = await api.get(`/organizer/events/${eventId}/staff/available`, {
+    params: trimmed ? { search: trimmed } : undefined,
+  })
+  return data.data || []
+}
+
 export async function assignOrganizerEventStaff(eventId, staffUserId) {
   const response = await api.post(`/organizer/events/${eventId}/staff`, { staff_user_id: staffUserId })
   return resourceData(response)

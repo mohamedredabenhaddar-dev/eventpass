@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarDays, LayoutDashboard, LogOut, Menu, Plus, X } from 'lucide-react'
+import { CalendarDays, LayoutDashboard, LogOut, Menu, Plus, UserCog, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import BrandMark from '../components/BrandMark.jsx'
 import { useAuth } from '../hooks/useAuth.js'
@@ -32,6 +32,7 @@ function OrganizerLayout() {
         <span className="organizer-nav-label">WORKSPACE</span>
         <NavLink end to="/organizer/dashboard" onClick={closeSidebar}><LayoutDashboard size={17} /> Overview</NavLink>
         <NavLink to="/organizer/events" onClick={closeSidebar}><CalendarDays size={17} /> My events</NavLink>
+        <NavLink end to="/organizer/profile" onClick={closeSidebar}><UserCog size={17} /> Profile</NavLink>
         <NavLink className="organizer-create-link" to="/organizer/events/new" onClick={closeSidebar}><Plus size={17} /> Create event</NavLink>
       </nav>
       <div className="organizer-sidebar-bottom"><span>EVENTPASS / ORGANIZERS</span><span>Make room for good things.</span></div>
