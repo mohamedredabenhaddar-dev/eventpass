@@ -121,7 +121,20 @@ class ReservationService
             }
 
             $reservation->total = $this->centsToMoney($totalCents);
-            $reservation->save();
+
+            if ($totalCents === 0) {
+                $reservation->status = ReservationStatus::Confirmed;
+                $reservation->payment_status = PaymentStatus::Paid;
+                $reservation->payment_expires_at = null;
+                $reservation->save();
+
+                $reservation->tickets()->update([
+                    'status' => TicketStatus::Valid->value,
+                    'updated_at' => now(),
+                ]);
+            } else {
+                $reservation->save();
+            }
 
             $this->audit->recordUserAction($user, 'reservation.created', $reservation->getKey(), metadata: [
                 'event_id' => $lockedEvent->getKey(),
@@ -147,7 +160,11 @@ class ReservationService
 
             abort_unless($lockedReservation->user_id === $user->getKey(), 404);
             abort_unless(in_array($lockedReservation->status, [ReservationStatus::Confirmed, ReservationStatus::PendingPayment], true), 409, 'This reservation cannot be cancelled.');
-            abort_unless($lockedReservation->payment_status !== PaymentStatus::Paid, 409, 'Paid reservations cannot be cancelled because demo mode has no refund processing.');
+
+            $isFree = $this->moneyToCents($lockedReservation->total) === 0;
+            if (! $isFree) {
+                abort_unless($lockedReservation->payment_status !== PaymentStatus::Paid, 409, 'Paid reservations cannot be cancelled because demo mode has no refund processing.');
+            }
             abort_unless($event->start_at->isFuture(), 409, 'A reservation cannot be cancelled after the event starts.');
 
             $items = $lockedReservation->items()->orderBy('ticket_type_id')->get();

@@ -13,6 +13,7 @@ function cents(value) {
 
 function money(value) {
   const amount = Number(value)
+  if (amount === 0) return 'Gratuit'
   return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
 }
 
@@ -44,7 +45,8 @@ function EventTicketSelection({ event }) {
     .filter((item) => item.quantity > 0), [ticketTypes, quantities])
 
   const totalCents = selected.reduce((total, item) => total + cents(item.ticketType.price) * item.quantity, 0)
-  const estimatedTotal = `${Math.floor(totalCents / 100)}.${String(totalCents % 100).padStart(2, '0')}`
+  const isFree = selected.length > 0 && totalCents === 0
+  const estimatedTotal = isFree ? 'Gratuit' : `${Math.floor(totalCents / 100)}.${String(totalCents % 100).padStart(2, '0')}`
 
   const setQuantity = (ticketType, value) => {
     const parsed = Number.parseInt(value, 10)
@@ -76,7 +78,11 @@ function EventTicketSelection({ event }) {
         ticket_type_id: ticketType.id,
         quantity,
       })))
-      navigate(`/client/checkout/${reservation.id}`, { state: { created: true } })
+      if (reservation.status === 'confirmed' || reservation.payment_status === 'paid') {
+        navigate('/my-tickets', { state: { created: true, freeConfirmed: true } })
+      } else {
+        navigate(`/client/checkout/${reservation.id}`, { state: { created: true } })
+      }
     } catch (requestError) {
       const errors = requestError.response?.data?.errors
       if (errors) setValidationErrors(Object.values(errors).flat())
@@ -132,9 +138,13 @@ function EventTicketSelection({ event }) {
       </div>}
       {user?.role && user.role !== 'client' && <p className="ticketing-note">Sign in with a client account to reserve tickets.</p>}
       <button className="button button-primary ticket-reserve-button" type="button" disabled={submitting || loading || selected.length === 0} onClick={reserve}>
-        {submitting ? 'Reserving...' : !user ? 'Sign in to reserve' : user.role === 'client' ? 'Reserve tickets' : 'Client account required'}
+        {submitting ? 'Réservation…' : !user ? 'Se connecter pour réserver' : user.role === 'client' ? (isFree ? 'Obtenir mon billet (Gratuit)' : 'Reserve tickets') : 'Client account required'}
       </button>
-      <p className="ticketing-demo-note">A temporary ticket hold will be created. Checkout is DEMO only; no money is charged.</p>
+      <p className="ticketing-demo-note">
+        {isFree
+          ? 'Cet événement est gratuit. Vos billets seront confirmés immédiatement sans passer par le paiement.'
+          : 'A temporary ticket hold will be created. Checkout is DEMO only; no money is charged.'}
+      </p>
     </section>
   )
 }
